@@ -12,6 +12,8 @@ from vllm.v1.kv_cache_interface import (KVCacheConfig, KVCacheSpec,
 from vllm.v1.metrics.stats import PrefixCacheStats
 from vllm.v1.request import Request
 
+from vllm.distributed.utils import get_device_ids
+
 logger = init_logger(__name__)
 
 
@@ -518,11 +520,17 @@ def _get_kv_cache_config_uniform_type(vllm_config: VllmConfig,
     """
 
     page_sizes = {layer.page_size_bytes for layer in kv_cache_spec.values()}
+    print(f"hosseins: {page_sizes=}")
     assert len(page_sizes) == 1
     page_size = page_sizes.pop()
-
+    print(f"hosseins: {page_size=}")
+    print(f"hosseins: {available_memory=}")
+    #  * max(1, len(get_device_ids()))
     num_blocks = int(available_memory // page_size // num_layers)
+    print(f"hosseins: {num_blocks=}")
     num_blocks = max(num_blocks, 0)
+    print(f"hosseins: {num_blocks=}")
+    print(f"hosseins: {vllm_config.cache_config.num_gpu_blocks_override=}")
 
     if vllm_config.cache_config.num_gpu_blocks_override is not None:
         num_gpu_blocks_override = \
@@ -533,6 +541,8 @@ def _get_kv_cache_config_uniform_type(vllm_config: VllmConfig,
         num_blocks = num_gpu_blocks_override
 
     num_tokens = num_blocks * vllm_config.cache_config.block_size
+    print(f"hosseins: {vllm_config.cache_config.block_size=}")
+    print(f"hosseins: {num_tokens=}")
     num_tokens_str = f"{num_tokens:,}"
     logger.info("GPU KV cache size: %s tokens", num_tokens_str)
     max_model_len_str = f"{vllm_config.model_config.max_model_len:,}"
@@ -572,6 +582,9 @@ def get_kv_cache_configs(vllm_config: VllmConfig,
     # the number of blocks.
     num_layers = max(len(kv_cache_spec) for kv_cache_spec in kv_cache_specs)
     kv_cache_configs = []
+    print(f"hosseins: get_kv_cache_configs() {num_layers=}")
+    print(f"hosseins: get_kv_cache_configs() {len(kv_cache_specs)=}")
+    print(f"hosseins: get_kv_cache_configs() {kv_cache_specs=}")
     for kv_cache_spec in kv_cache_specs:
         check_enough_kv_cache_memory(vllm_config, kv_cache_spec,
                                      available_memory)

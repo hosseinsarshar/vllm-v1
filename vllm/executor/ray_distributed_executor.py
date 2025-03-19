@@ -198,6 +198,7 @@ class RayDistributedExecutor(DistributedExecutorBase):
 
         worker_metadata: List[RayWorkerMetaData] = []
         driver_ip = get_ip()
+        print(f"hosseins: _init_workers_ray() {len(bundle_indices)=}")
         for rank, bundle_id in enumerate(bundle_indices):
             scheduling_strategy = PlacementGroupSchedulingStrategy(
                 placement_group=placement_group,
@@ -230,7 +231,7 @@ class RayDistributedExecutor(DistributedExecutorBase):
             each.worker.get_node_ip.remote()  # type: ignore[attr-defined]
             for each in worker_metadata
         ])
-
+        print(f"hosseins: _init_workers_ray() {worker_ips=}")
         for each, ip in zip(worker_metadata, worker_ips):
             each.ip = ip
 
@@ -248,6 +249,7 @@ class RayDistributedExecutor(DistributedExecutorBase):
                     worker_metadata.pop(i)
                     break
 
+        print(f"hosseins: _init_workers_ray() {worker_metadata=}")
         logger.debug("workers: %s", worker_metadata)
         logger.debug("driver_dummy_worker: %s", self.driver_dummy_worker)
         if not self.use_ray_spmd_worker and self.driver_dummy_worker is None:
@@ -288,6 +290,8 @@ class RayDistributedExecutor(DistributedExecutorBase):
             for item in sorted_worker_metadata
         }
         self._run_workers("adjust_rank", rerank_mapping)
+        print(f"hosseins: _init_workers_ray() {self.workers=}")
+        print(f"hosseins: _init_workers_ray() {len(self.workers)=}")
 
         # Get the set of GPU IDs used on each node.
         worker_node_and_gpu_ids = []
@@ -314,9 +318,12 @@ class RayDistributedExecutor(DistributedExecutorBase):
         for node_id, gpu_ids in node_gpus.items():
             node_gpus[node_id] = sorted(gpu_ids)
 
+        print(f"hosseins: _init_workers_ray() {node_gpus=}")
+
         all_ips = set(worker_ips + [driver_ip])
         n_ips = len(all_ips)
         n_nodes = len(node_workers)
+        print(f"hosseins: _init_workers_ray() {len(node_workers)=}")
 
         if n_nodes != n_ips:
             raise RuntimeError(
@@ -332,6 +339,7 @@ class RayDistributedExecutor(DistributedExecutorBase):
             current_platform.device_control_env_var:
             ",".join(map(str, node_gpus[node_id])),
         } for (node_id, _) in worker_node_and_gpu_ids]
+        print(f"hosseins: _init_workers_ray() {all_args_to_update_environment_variables=}")
 
         # Environment variables to copy from driver to workers
         env_vars_to_copy = [
@@ -408,6 +416,7 @@ class RayDistributedExecutor(DistributedExecutorBase):
                     assert pp_rank < len(self.pp_tp_workers)
                     self.pp_tp_workers[pp_rank].append(self.workers[rank])
 
+        print(f"hosseins: _init_workers_ray() {self.pp_tp_workers=}")
         # This is the list of workers that are rank 0 of each TP group EXCEPT
         # global rank 0. These are the workers that will broadcast to the
         # rest of the workers.
@@ -425,6 +434,10 @@ class RayDistributedExecutor(DistributedExecutorBase):
                 self.tp_driver_workers.append(worker)
             else:
                 self.non_driver_workers.append(worker)
+
+        print(f"hosseins: _init_workers_ray() {len(self.tp_driver_workers)=}")
+        print(f"hosseins: _init_workers_ray() {len(self.non_driver_workers)=}")
+        
 
     def _driver_execute_model(
         self, execute_model_req: Optional[ExecuteModelRequest]

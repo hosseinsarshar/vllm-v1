@@ -20,6 +20,8 @@ from vllm.worker.tpu_model_runner import ExecutionMode, TPUModelRunner
 from vllm.worker.worker_base import (LocalOrDistributedWorkerBase,
                                      LoRANotSupportedWorkerBase, WorkerBase,
                                      WorkerInput)
+from vllm.distributed.utils import initialize_spmd
+from vllm.distributed.utils import initialize_spmd, get_device_ids, shard_spmd, get_col_parallel_partition_spec, is_spmd, get_shard_spec, get_row_parallel_partition_spec
 
 logger = init_logger(__name__)
 
@@ -40,6 +42,7 @@ class TPUWorker(LoRANotSupportedWorkerBase, LocalOrDistributedWorkerBase):
         self.rank = rank
         self.distributed_init_method = distributed_init_method
         self.is_driver_worker = is_driver_worker
+        initialize_spmd()
 
         assert self.device_config.device_type == "tpu"
         if self.cache_config.cache_dtype == "auto":
@@ -50,6 +53,7 @@ class TPUWorker(LoRANotSupportedWorkerBase, LocalOrDistributedWorkerBase):
 
         self.model_runner: TPUModelRunner = TPUModelRunner(
             vllm_config=vllm_config, is_driver_worker=is_driver_worker)
+        
 
     def init_device(self) -> None:
         os.environ["PJRT_DEVICE"] = "TPU"
@@ -78,7 +82,8 @@ class TPUWorker(LoRANotSupportedWorkerBase, LocalOrDistributedWorkerBase):
 
         # Set random seed.
         set_random_seed(self.model_config.seed)
-        xm.set_rng_state(self.model_config.seed, self.device)
+        if self.model_config.seed is not None:
+            xm.set_rng_state(self.model_config.seed, self.device)
 
         # Increase the cache size limit, which is the maximum number of
         # dynamo graphs that can be compiled.
@@ -170,6 +175,7 @@ class TPUWorker(LoRANotSupportedWorkerBase, LocalOrDistributedWorkerBase):
         num_gpu_blocks: int,
         num_cpu_blocks: int,
     ) -> None:
+        print(f"hosseins: v0 initialize_cache is called")
         self.cache_config.num_gpu_blocks = num_gpu_blocks
         self.cache_config.num_cpu_blocks = num_cpu_blocks
         self.block_size = self.cache_config.block_size
@@ -189,7 +195,9 @@ class TPUWorker(LoRANotSupportedWorkerBase, LocalOrDistributedWorkerBase):
             tpu_k_cache = torch.zeros(tpu_cache_shape,
                                       dtype=dtype,
                                       device=self.device)
+            shard_spmd(data=tpu_k_cache, partition_spec=((None, None) + get_row_parallel_partition_spec()))
             tpu_v_cache = torch.zeros_like(tpu_k_cache)
+            shard_spmd(data=tpu_v_cache, partition_spec=((None, None) + get_row_parallel_partition_spec()))
             self.tpu_cache.append((tpu_k_cache, tpu_v_cache))
             cpu_k_cache = torch.zeros(cpu_cache_shape,
                                       dtype=dtype,
@@ -307,8 +315,8 @@ def _make_src_to_dst(
                                dtype=torch.int64)
     return src_indices, dst_indices
 
-
-@torch.compile(backend="openxla")
+# hosseins: torch.compile
+# @torch.compile(backend="openxla")
 def _insert_kv(
     k: torch.Tensor,
     v: torch.Tensor,

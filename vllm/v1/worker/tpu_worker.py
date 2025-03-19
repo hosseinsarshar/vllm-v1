@@ -24,6 +24,10 @@ from vllm.v1.outputs import ModelRunnerOutput
 from vllm.v1.utils import bind_kv_cache
 from vllm.v1.worker.tpu_model_runner import TPUModelRunner
 
+from vllm.distributed.utils import initialize_spmd
+from vllm.utils import get_tpu_info
+import time
+
 logger = init_logger(__name__)
 
 
@@ -54,6 +58,7 @@ class TPUWorker:
         self.local_rank = local_rank
         self.rank = rank
         self.distributed_init_method = distributed_init_method
+        initialize_spmd()
 
         if self.cache_config.cache_dtype == "auto":
             self.cache_dtype = self.model_config.dtype
@@ -67,6 +72,7 @@ class TPUWorker:
             init_cached_hf_modules()
 
         self.profiler = None
+        print(f"hosseins: {envs.VLLM_TORCH_PROFILER_DIR=}")
         if envs.VLLM_TORCH_PROFILER_DIR and self.rank < 1:
             # For TPU, we can only have 1 active profiler session for 1 profiler
             # server. So we only profile on rank0.
@@ -74,6 +80,10 @@ class TPUWorker:
             logger.info("Profiling enabled. Traces will be saved to: %s",
                         self.profile_dir)
             self.profiler = xp.start_server(9012)
+            profile_logdir = "/tmp/profile/"
+            print(f"hosseins: starting the profile at [{envs.VLLM_TORCH_PROFILER_DIR}]")
+            duration_ms = 300000
+            xp.trace_detached(f'localhost:{9012}', envs.VLLM_TORCH_PROFILER_DIR, duration_ms=duration_ms)
 
         if self.model_config.seed is None:
             self.model_config.seed = 0
@@ -148,7 +158,7 @@ class TPUWorker:
 
         # Get the maximum amount of memory used by the model weights and
         # intermediate activations.
-        m = xm.get_memory_info(self.device)
+        m = get_tpu_info(0)
         total_memory_size = m["bytes_limit"]
         profiled = m["peak_bytes_used"]  # Weights + intermediate activations.
 
@@ -194,7 +204,9 @@ class TPUWorker:
 
     def initialize_from_config(self, kv_cache_config: KVCacheConfig) -> None:
         """Allocate GPU KV cache with the specified kv_cache_config."""
+        print(f"hosseins: initialize_from_config() {kv_cache_config=}")
         self.model_runner.initialize_kv_cache(kv_cache_config)
+        
 
     def check_health(self) -> None:
         # worker will always be healthy as long as it's running.

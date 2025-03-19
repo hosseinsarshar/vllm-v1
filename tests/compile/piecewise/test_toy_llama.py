@@ -146,6 +146,7 @@ class LlamaAttention(nn.Module):
         positions: torch.Tensor,
         hidden_states: torch.Tensor,
     ) -> torch.Tensor:
+        print('hosseins: LlamaAttention.forward()')
         # for tractable_init, this is:
         # output = (hidden_states * 3 + positions * 2)
         qkv = self.qkv_projection(hidden_states)
@@ -184,6 +185,7 @@ class LlamaDecoderLayer(nn.Module):
             - residual = (hidden_states + residual + 1) * 3 + positions * 2 + hidden_states + residual = (hidden_states + residual) * 4 + positions * 2 + 3
             - hidden_states = (residual + 1) ** 2
         """ # noqa
+        print('hosseins: LlamaDecoderLayer.forward()')
         if residual is None:
             residual = hidden_states
             hidden_states = hidden_states + 1

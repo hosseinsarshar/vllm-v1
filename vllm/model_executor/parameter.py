@@ -9,6 +9,7 @@ from torch.nn import Parameter
 from vllm.distributed import get_tensor_model_parallel_rank
 from vllm.logger import init_logger
 from vllm.model_executor.utils import _make_synced_weight_loader
+from vllm.distributed.utils import get_mesh, get_col_parallel_partition_spec, get_row_parallel_partition_spec, shard_spmd
 
 __all__ = [
     "BasevLLMParameter", "PackedvLLMParameter", "PerTensorScaleParameter",
@@ -39,7 +40,7 @@ class BasevLLMParameter(Parameter):
 
         :returns: a torch.nn.parameter
         """
-
+        print("hosseins: BasevLLMParameter -> __init__")
         # During weight loading, we often do something like:
         # narrowed_tensor = param.data.narrow(0, offset, len)
         # narrowed_tensor.copy_(real_weight)
@@ -96,20 +97,25 @@ class _ColumnvLLMParameter(BasevLLMParameter):
         self._output_dim = output_dim
         super().__init__(**kwargs)
 
+        self.mesh = get_mesh()
+
     @property
     def output_dim(self):
         return self._output_dim
 
     def load_column_parallel_weight(self, loaded_weight: torch.Tensor):
+        print("hosseins: _ColumnvLLMParameter -> load_column_parallel_weight")
         tp_rank = get_tensor_model_parallel_rank()
         shard_size = self.data.shape[self.output_dim]
         loaded_weight = loaded_weight.narrow(self.output_dim,
                                              tp_rank * shard_size, shard_size)
         assert self.data.shape == loaded_weight.shape
         self.data.copy_(loaded_weight)
+        shard_spmd(self.data, self.mesh, get_col_parallel_partition_spec())
 
     def load_merged_column_weight(self, loaded_weight: torch.Tensor, **kwargs):
 
+        print("hosseins: _ColumnvLLMParameter -> load_merged_column_weight")
         shard_offset = kwargs.get("shard_offset")
         shard_size = kwargs.get("shard_size")
         if isinstance(
@@ -128,8 +134,10 @@ class _ColumnvLLMParameter(BasevLLMParameter):
                                              tp_rank * shard_size, shard_size)
         assert param_data.shape == loaded_weight.shape
         param_data.copy_(loaded_weight)
+        shard_spmd(self.data, self.mesh, get_col_parallel_partition_spec())
 
     def load_qkv_weight(self, loaded_weight: torch.Tensor, **kwargs):
+        print("hosseins: _ColumnvLLMParameter -> load_qkv_weight")
 
         shard_offset = kwargs.get("shard_offset")
         shard_size = kwargs.get("shard_size")
@@ -153,6 +161,7 @@ class _ColumnvLLMParameter(BasevLLMParameter):
 
         assert param_data.shape == loaded_weight.shape
         param_data.copy_(loaded_weight)
+        shard_spmd(self.data, self.mesh, get_col_parallel_partition_spec() if self.output_dim == 0 else get_row_parallel_partition_spec())
 
 
 class RowvLLMParameter(BasevLLMParameter):
@@ -164,6 +173,7 @@ class RowvLLMParameter(BasevLLMParameter):
     """
 
     def __init__(self, input_dim: int, **kwargs):
+        print("hosseins: RowvLLMParameter -> init")
         self._input_dim = input_dim
         super().__init__(**kwargs)
 
@@ -172,6 +182,7 @@ class RowvLLMParameter(BasevLLMParameter):
         return self._input_dim
 
     def load_row_parallel_weight(self, loaded_weight: torch.Tensor):
+        print("hosseins: RowvLLMParameter -> load_row_parallel_weight")
         tp_rank = get_tensor_model_parallel_rank()
         shard_size = self.data.shape[self.input_dim]
         loaded_weight = loaded_weight.narrow(self.input_dim,
@@ -182,6 +193,7 @@ class RowvLLMParameter(BasevLLMParameter):
 
         assert self.data.shape == loaded_weight.shape
         self.data.copy_(loaded_weight)
+        shard_spmd(self.data, self.mesh, get_row_parallel_partition_spec())
 
 
 class ModelWeightParameter(_ColumnvLLMParameter, RowvLLMParameter):

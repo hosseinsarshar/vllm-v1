@@ -97,21 +97,29 @@ class EngineCore:
 
         # Get all kv cache needed by the model
         kv_cache_specs = self.model_executor.get_kv_cache_specs()
+        print(f"hosseins: _initialize_kv_caches() {self.model_executor=}")
 
+        print(f"hosseins: _initialize_kv_caches() {kv_cache_specs=}")
         # Profiles the peak memory usage of the model to determine how much
         # memory can be allocated for kv cache.
         available_gpu_memory = self.model_executor.determine_available_memory()
+        print(f"hosseins: _initialize_kv_caches() {available_gpu_memory=}")
 
         # Get the kv cache tensor size
         kv_cache_configs = get_kv_cache_configs(vllm_config, kv_cache_specs,
                                                 available_gpu_memory)
+        print(f"hosseins: _initialize_kv_caches() {kv_cache_configs=}")
+        
         num_gpu_blocks_set = set(config.num_blocks
                                  for config in kv_cache_configs)
+        print(f"hosseins: _initialize_kv_caches() {num_gpu_blocks_set=}")
+        
         assert len(num_gpu_blocks_set) == 1, (
             f"num_gpu_blocks need to be the same across workers, "
             f"but they are different: {num_gpu_blocks_set}")
         num_gpu_blocks = num_gpu_blocks_set.pop()
         num_cpu_blocks = 0
+        print(f"hosseins: _initialize_kv_caches() {num_gpu_blocks=}")
 
         # Initialize kv cache and warmup the execution
         self.model_executor.initialize_from_config(kv_cache_configs)

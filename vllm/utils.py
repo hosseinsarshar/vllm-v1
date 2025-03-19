@@ -56,6 +56,9 @@ from typing_extensions import Never, ParamSpec, TypeIs, assert_never
 import vllm.envs as envs
 from vllm.logger import enable_trace_function_call, init_logger
 
+from tpu_info import device as tpu_info_device
+from tpu_info.cli import metrics
+
 if TYPE_CHECKING:
     from vllm.config import VllmConfig
 
@@ -2377,3 +2380,10 @@ def swap_dict_values(obj: dict[_K, _V], key1: _K, key2: _K) -> None:
         obj[key1] = v2
     else:
         obj.pop(key1, None)
+
+def get_tpu_info(device = None):
+    tpu_info = metrics.get_chip_usage(tpu_info_device.get_local_chips()[0])
+    util = {f"bytes_limit": tpu.total_memory for tpu in (tpu_info if device is None else [tpu_info[device]])}
+    memory = {f"peak_bytes_used": tpu.memory_usage for tpu in (tpu_info if device is None else [tpu_info[device]])}
+    return util | memory
+    # return {f"TPU Utilization (%) / Device 0": 0} | {f"TPU Memory (%) / Device 0": 0}

@@ -3,6 +3,7 @@ import time
 from typing import TYPE_CHECKING, Optional, cast
 from unittest.mock import patch
 
+import time
 import numpy as np
 import torch
 import torch.distributed
@@ -32,6 +33,8 @@ from vllm.v1.outputs import (EMPTY_MODEL_RUNNER_OUTPUT, LogprobsTensors,
                              ModelRunnerOutput)
 from vllm.v1.utils import bind_kv_cache
 from vllm.v1.worker.gpu_input_batch import CachedRequestState, InputBatch
+
+from vllm.distributed.utils import shard_spmd, get_shard_spec, get_mesh
 
 if TYPE_CHECKING:
     from vllm.v1.core.scheduler import SchedulerOutput
@@ -70,6 +73,8 @@ class TPUModelRunner:
         self.device = device
         self.pin_memory = is_pin_memory_available()
         self.dtype = self.model_config.dtype
+
+        self.mesh = get_mesh()
 
         self.is_multimodal_model = model_config.is_multimodal_model
         self.sliding_window = model_config.get_sliding_window()
@@ -301,10 +306,16 @@ class TPUModelRunner:
 
         forward_ctx = self.vllm_config.compilation_config.static_forward_context
         block_size = self.vllm_config.cache_config.block_size
+        # print(f"hosseins: {block_size=}")
         kv_cache_spec: KVCacheSpec = {}
         for layer_name, attn_module in forward_ctx.items():
             # TODO: Support other attention modules, e.g., sliding window,
             # cross-attention, MLA.
+            # print(f"hosseins: {layer_name=}")
+            # print(f"hosseins: {block_size=}")
+            # print(f"hosseins: {attn_module.num_kv_heads=}")
+            # print(f"hosseins: {attn_module.head_size=}")
+            # print(f"hosseins: {attn_module.dtype=}")
             assert isinstance(attn_module, Attention)
             if attn_module.attn_type == AttentionType.DECODER:
                 kv_cache_spec[layer_name] = FullAttentionSpec(
@@ -586,7 +597,7 @@ class TPUModelRunner:
         selected_token_ids = self.model.compute_logits(hidden_states,
                                                        logits_indices, None)
         selected_token_ids = selected_token_ids.cpu()[:num_reqs]
-
+    
         # Then, let's update the cache state.
         request_seq_lens: list[tuple[int, CachedRequestState, int]] = []
         for i, req_id in zip(range(num_reqs), self.input_batch.req_ids):
@@ -668,10 +679,14 @@ class TPUModelRunner:
         xm.mark_step()
         xm.wait_device_ops()
         model = ModelWrapperV1(model)
-        self.model = torch.compile(model,
-                                   backend="openxla",
-                                   fullgraph=True,
-                                   dynamic=False)
+        print("hosseins: load_model() model is loaded")
+        self.model = model
+
+        # hosseins: torch.compile
+        # self.model = torch.compile(model,
+        #                            backend="openxla",
+        #                            fullgraph=True,
+        #                            dynamic=False)
 
     def _dummy_run(
         self,
@@ -784,26 +799,62 @@ class TPUModelRunner:
                 "supported yet.")
 
         kv_caches: dict[str, torch.Tensor] = {}
+        print(f"hosseins: initialize_kv_cache() {kv_cache_config=}")
+
+        print(f"hosseins: {len(kv_cache_config.kv_cache_spec)=}")
+        print(f"hosseins: {kv_cache_config.num_blocks=}")
+        print(f"hosseins: {len(kv_cache_config.tensors)=}")
+        print(f"hosseins: {len(kv_cache_config.groups)=}")
+
+        print(f"hosseins: {len(kv_cache_config.kv_cache_spec.items())=}")
 
         for layer_name, layer_spec in kv_cache_config.kv_cache_spec.items():
             tensor_config = kv_cache_config.tensors[layer_name]
             assert tensor_config.size % layer_spec.page_size_bytes == 0
             num_blocks = tensor_config.size // layer_spec.page_size_bytes
+            print(f"hosseins: ============================= {layer_name} =============================")
+            print(f"hosseins: {num_blocks=}")
+            print(f"hosseins: {layer_spec.block_size=}")
+            print(f"hosseins: {layer_spec.num_kv_heads=}")
+            print(f"hosseins: {layer_spec.head_size=}")
+            
             if isinstance(layer_spec, FullAttentionSpec):
                 kv_cache_shape = PallasAttentionBackend.get_kv_cache_shape(
                     num_blocks, layer_spec.block_size, layer_spec.num_kv_heads,
                     layer_spec.head_size)
+                
                 dtype = layer_spec.dtype
 
                 tpu_k_cache = torch.zeros(kv_cache_shape,
                                           dtype=dtype,
                                           device=self.device)
-                tpu_v_cache = torch.zeros_like(tpu_k_cache)
+                
+                tpu_v_cache = torch.zeros(kv_cache_shape,
+                                          dtype=dtype,
+                                          device=self.device)
+                
+                print(f"hosseins: {dtype=}")
 
+                print(f"hosseins: {tpu_k_cache.shape=}")
+                print(f"hosseins: {tpu_k_cache.device=}")
+                shard_spmd(data=tpu_k_cache, mesh=self.mesh, partition_spec=(None, None, 'axis', None))
+                # torch._sync(tpu_k_cache)
+                print(f"hosseins: {get_shard_spec(tpu_k_cache)=}")
+                
+                time.sleep(1)
+                
+                print(f"hosseins: {tpu_v_cache.shape=}")
+                print(f"hosseins: {tpu_v_cache.device=}")
+                tpu_v_cache = tpu_v_cache.to(self.device)
+                shard_spmd(data=tpu_v_cache, mesh=self.mesh, partition_spec=(None, None, 'axis', None))
+                # torch._sync(tpu_v_cache)
+                print(f"hosseins: {get_shard_spec(tpu_v_cache)=}")
                 kv_caches[layer_name] = (tpu_k_cache, tpu_v_cache)
             else:
                 raise NotImplementedError
 
+
+        print(f"hosseins: initialize_kv_cache() {kv_cache_config=}")
         bind_kv_cache(
             kv_caches,
             self.vllm_config.compilation_config.static_forward_context,
@@ -833,23 +884,37 @@ class ModelWrapperV1(nn.Module):
             inputs_embeds: The input embeddings of shape [num_tokens,
                 hidden_size]. It is used for multimodal models.
         """
-
+        print("hosseins: ModelWrapperV1.forward()")
+        print(f"hosseins: ModelWrapperV1 -> forward() 1 {get_shard_spec(input_ids)=}")
+        print(f"hosseins: ModelWrapperV1 -> forward() 1 {get_shard_spec(positions)=}")
+        # print(f"hosseins: ModelWrapperV1 -> forward() 1 {get_shard_spec(inputs_embeds)=}")
         assert self.model is not None
+        
         hidden_states = self.model(
             input_ids=input_ids,
             positions=positions,
             inputs_embeds=inputs_embeds,
         )
 
+        print(f"hosseins: ModelWrapperV1 -> forward() 2 {get_shard_spec(hidden_states)=}")
+        print(f"hosseins: ModelWrapperV1 -> forward() 2 {get_shard_spec(input_ids)=}")
+        print(f"hosseins: ModelWrapperV1 -> forward() 2 {get_shard_spec(positions)=}")
+        # print(f"hosseins: ModelWrapperV1 -> forward() 2 {get_shard_spec(inputs_embeds)=}")
+
         return hidden_states
 
-    @torch.compile(backend="openxla", fullgraph=True, dynamic=False)
+    # hosseins: torch.compile
+    # @torch.compile(backend="openxla", fullgraph=True, dynamic=False)
     def compute_logits(
         self,
         hidden_states: torch.Tensor,
         logits_indices: torch.Tensor,
         sampling_metadata,
     ) -> Optional[torch.Tensor]:
+        print(f"hosseins: ModelWrapperV1 -> compute_logits() {hidden_states.shape=}")
+        print(f"hosseins: ModelWrapperV1 -> compute_logits() {get_shard_spec(hidden_states)=}")
+        print(f"hosseins: ModelWrapperV1 -> compute_logits() {logits_indices.shape=}")
+        print(f"hosseins: ModelWrapperV1 -> compute_logits() {get_shard_spec(logits_indices)=}")
         hidden_states = hidden_states[logits_indices]
         logits = self.model.compute_logits(hidden_states, sampling_metadata)
         selected_token_ids = torch.argmax(logits, dim=-1, keepdim=True)
