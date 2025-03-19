@@ -892,6 +892,7 @@ def initialize_model_parallel(
     # Get world size and rank. Ensure some consistencies.
     assert torch.distributed.is_initialized()
     world_size: int = torch.distributed.get_world_size()
+    print(f"hosseins: initialize_model_parallel() {world_size=}")
     rank = torch.distributed.get_rank()
     backend = backend or torch.distributed.get_backend(
         get_world_group().device_group)
@@ -908,6 +909,7 @@ def initialize_model_parallel(
     all_ranks = torch.arange(world_size).reshape(
         data_parallel_size, pipeline_model_parallel_size,
         tensor_model_parallel_size)  # noqa
+    print(f"hosseins: initialize_model_parallel() {all_ranks=}")
 
     # Build the tensor model-parallel groups.
     global _TP

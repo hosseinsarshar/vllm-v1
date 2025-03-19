@@ -11,7 +11,7 @@ __pycache__/
 
 # C extensions
 *.so
-
+script.sh
 # Distribution / packaging
 .Python
 build/
@@ -34,6 +34,7 @@ share/python-wheels/
 *.egg
 MANIFEST
 /.deps/
+torch_compile_debug/
 
 # PyInstaller
 #  Usually these files are written by a python script from a template

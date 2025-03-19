@@ -26,6 +26,13 @@ from vllm.model_executor.parameter import (BasevLLMParameter,
 # yapf: enable
 from vllm.model_executor.utils import set_weight_attrs
 
+from vllm.utils import get_tpu_info
+
+from vllm.distributed.utils import get_mesh, get_col_parallel_partition_spec, get_row_parallel_partition_spec, shard_spmd, get_shard_spec
+import torch_xla.distributed.spmd as xs
+from torch_xla.distributed.spmd.debugging import visualize_tensor_sharding
+
+
 logger = init_logger(__name__)
 
 WEIGHT_LOADER_V2_SUPPORTED = [
@@ -138,8 +145,14 @@ class UnquantizedLinearMethod(LinearMethodBase):
               layer: torch.nn.Module,
               x: torch.Tensor,
               bias: Optional[torch.Tensor] = None) -> torch.Tensor:
+        print(f"hosseins: UnquantizedLinearMethod -> apply() {layer.weight.shape=} {get_shard_spec(layer.weight)=}")
+        print(f"hosseins: UnquantizedLinearMethod -> apply() {x.shape=} {get_shard_spec(x)=}")
 
-        return F.linear(x, layer.weight, bias)
+        out = F.linear(x, layer.weight, bias)
+        # mark sharding (as it's lazy - this is the hint not the actual execution of the graph) or xm.mark_step() for debug
+        print(f"hosseins: UnquantizedLinearMethod -> apply() {out.shape=} {get_shard_spec(out)=}")
+
+        return out
 
 
 class LinearBase(torch.nn.Module):
@@ -267,6 +280,8 @@ class ReplicatedLinear(LinearBase):
     def forward(
         self, x: torch.Tensor
     ) -> Union[torch.Tensor, tuple[torch.Tensor, Optional[Parameter]]]:
+        print(f"hosseins: ReplicatedLinear -> forward() {type(self)=}")
+        
         bias = self.bias if not self.skip_bias_add else None
         assert self.quant_method is not None
         output = self.quant_method.apply(self, x, bias)
@@ -339,7 +354,8 @@ class ColumnParallelLinear(LinearBase):
                          quant_config,
                          prefix,
                          return_bias=return_bias)
-
+        
+        self.mesh = get_mesh()
         self.gather_output = gather_output
 
         if output_sizes is None:
@@ -418,6 +434,8 @@ class ColumnParallelLinear(LinearBase):
     def forward(
         self, input_
     ) -> Union[torch.Tensor, tuple[torch.Tensor, Optional[Parameter]]]:
+        print(f"hosseins: ColumnParallelLinear -> forward() {type(self)=}")
+        print(f"hosseins: ColumnParallelLinear -> forward() {type(self.quant_method)=}")
         bias = self.bias if not self.skip_bias_add else None
 
         # Matrix multiply.
@@ -428,6 +446,8 @@ class ColumnParallelLinear(LinearBase):
             output = tensor_model_parallel_all_gather(output_parallel)
         else:
             output = output_parallel
+
+        print(f"hosseins: ColumnParallelLinear -> forward() {get_shard_spec(output)=}")
         output_bias = self.bias if self.skip_bias_add else None
         if not self.return_bias:
             return output
@@ -530,6 +550,10 @@ class MergedColumnParallelLinear(ColumnParallelLinear):
                 return
 
         param_data = param.data
+        shard_spmd(param_data.data, self.mesh, get_col_parallel_partition_spec())
+        torch._sync(param_data)
+        print(f"hosseins: MergedColumnParallelLinear -> weight_loader() 1 {get_shard_spec(param_data.data)=}")
+
         output_dim = getattr(param, "output_dim", None)
         # Special case for AQLM codebooks.
         is_metadata = getattr(param, "is_metadata", False)
@@ -546,7 +570,11 @@ class MergedColumnParallelLinear(ColumnParallelLinear):
 
                 assert param_data.shape == loaded_weight.shape
                 param_data.copy_(loaded_weight)
+                shard_spmd(param_data.data, self.mesh, get_col_parallel_partition_spec())
+                torch._sync(param_data)
+                print(f"hosseins: MergedColumnParallelLinear -> weight_loader() 4 {get_shard_spec(param_data.data)=}")
                 return
+            
             current_shard_offset = 0
             use_bitsandbytes_4bit = getattr(param, "use_bitsandbytes_4bit",
                                             False)
@@ -579,6 +607,11 @@ class MergedColumnParallelLinear(ColumnParallelLinear):
                 loaded_weight_shard = loaded_weight.narrow(
                     output_dim, shard_offset, shard_size)
                 self.weight_loader(param, loaded_weight_shard, shard_id)
+
+                shard_spmd(param.data, self.mesh, get_col_parallel_partition_spec())
+                torch._sync(param)
+                print(f"hosseins: MergedColumnParallelLinear -> weight_loader() 5 {get_shard_spec(param.data)=}")
+
             return
 
         assert loaded_shard_id < len(self.output_sizes)
@@ -612,6 +645,11 @@ class MergedColumnParallelLinear(ColumnParallelLinear):
 
             param_data = param_data.narrow(output_dim, shard_offset,
                                            shard_size)
+            param_data = param_data.to(param.device)
+            shard_spmd(param_data.data, self.mesh, get_col_parallel_partition_spec())
+            torch._sync(param_data)
+            print(f"hosseins: MergedColumnParallelLinear -> weight_loader() 2 {get_shard_spec(param_data.data)=}")
+
             start_idx = tp_rank * shard_size
             if not is_sharded_weight:
                 loaded_weight = loaded_weight.narrow(output_dim, start_idx,
@@ -638,6 +676,23 @@ class MergedColumnParallelLinear(ColumnParallelLinear):
 
         assert param_data.shape == loaded_weight.shape
         param_data.copy_(loaded_weight)
+
+        logger.info(f"hosseins: MergedColumnParallelLinear -> weight_loader() 2 [{param.device=}]")
+        logger.info(f"hosseins: MergedColumnParallelLinear -> weight_loader() 2 [{param_data.device=}]")
+        logger.info(f"hosseins: MergedColumnParallelLinear -> weight_loader() 2 [{param.shape=}]")
+        logger.info(f"hosseins: MergedColumnParallelLinear -> weight_loader() 2 [{loaded_weight.shape=}]")
+        logger.info(f"hosseins: MergedColumnParallelLinear -> weight_loader() 2 [{param_data.shape=}]")
+        logger.info(f"hosseins: MergedColumnParallelLinear -> weight_loader() 2 [{param.data.shape=}]")
+
+
+        shard_spmd(param.data, self.mesh, get_col_parallel_partition_spec())
+        torch._sync(param)
+        print(f"hosseins: MergedColumnParallelLinear -> weight_loader() 3 {get_shard_spec(param.data)=}")
+        # shard_spmd(param_data.data, self.mesh, get_col_parallel_partition_spec())
+        # torch._sync(param_data)
+        print(f"hosseins: MergedColumnParallelLinear -> weight_loader() 3 {get_shard_spec(param_data.data)=}")
+
+
 
     def _load_fused_module_from_checkpoint(self, param: BasevLLMParameter,
                                            loaded_weight: torch.Tensor):
@@ -1057,6 +1112,18 @@ class QKVParallelLinear(ColumnParallelLinear):
         assert param_data.shape == loaded_weight.shape
         param_data.copy_(loaded_weight)
 
+        logger.info(f"hosseins: QKVParallelLinear -> weight_loader() 2 [{param.device=}]")
+        logger.info(f"hosseins: QKVParallelLinear -> weight_loader() 2 [{param_data.device=}]")
+        logger.info(f"hosseins: QKVParallelLinear -> weight_loader() 2 [{param.shape=}]")
+        logger.info(f"hosseins: QKVParallelLinear -> weight_loader() 2 [{loaded_weight.shape=}]")
+        logger.info(f"hosseins: QKVParallelLinear -> weight_loader() 2 [{param_data.shape=}]")
+        logger.info(f"hosseins: QKVParallelLinear -> weight_loader() 2 [{param.data.shape=}]")
+
+        shard_spmd(param.data, self.mesh, get_col_parallel_partition_spec())
+        print(f"hosseins: QKVParallelLinear -> weight_loader() {get_shard_spec(param.data)=}")
+        print(f"hosseins: QKVParallelLinear -> weight_loader() {get_shard_spec(param_data.data)=}")
+
+        torch._sync(param)
 
 class RowParallelLinear(LinearBase):
     """Linear layer with row parallelism.
@@ -1112,7 +1179,7 @@ class RowParallelLinear(LinearBase):
                          quant_config,
                          prefix,
                          return_bias=return_bias)
-
+        self.mesh = get_mesh()
         self.input_is_parallel = input_is_parallel
         self.reduce_results = reduce_results
 
@@ -1178,6 +1245,20 @@ class RowParallelLinear(LinearBase):
 
         assert param_data.shape == loaded_weight.shape
         param_data.copy_(loaded_weight)
+        
+        logger.info(f"hosseins: RowParallelLinear -> weight_loader() 2 [{param.device=}]")
+        logger.info(f"hosseins: RowParallelLinear -> weight_loader() 2 [{param_data.device=}]")
+        logger.info(f"hosseins: RowParallelLinear -> weight_loader() 2 [{param.shape=}]")
+        logger.info(f"hosseins: RowParallelLinear -> weight_loader() 2 [{loaded_weight.shape=}]")
+        logger.info(f"hosseins: RowParallelLinear -> weight_loader() 2 [{param_data.shape=}]")
+        logger.info(f"hosseins: RowParallelLinear -> weight_loader() 2 [{param.data.shape=}]")
+
+        shard_spmd(param.data, self.mesh, get_row_parallel_partition_spec())
+        print(f"hosseins: RowParallelLinear -> weight_loader() {get_shard_spec(param.data)=}")
+        print(f"hosseins: RowParallelLinear -> weight_loader() {get_shard_spec(param_data.data)=}")
+
+        torch._sync(param)
+
 
     def weight_loader_v2(self, param: BasevLLMParameter,
                          loaded_weight: torch.Tensor):
@@ -1193,6 +1274,7 @@ class RowParallelLinear(LinearBase):
     def forward(
         self, input_
     ) -> Union[torch.Tensor, tuple[torch.Tensor, Optional[Parameter]]]:
+        print(f"hosseins: RowParallelLinear -> forward() {type(self)=}")
         if self.input_is_parallel:
             input_parallel = input_
         else:
@@ -1288,6 +1370,8 @@ class QKVCrossParallelLinear(torch.nn.Module):
         return self.proj["kv_proj_encoder"]
 
     def forward(self, decoder_hidden_states, encoder_hidden_states):
+        print(f"hosseins: QKVCrossParallelLinear -> forward() {type(self)=}")
+
         q, _ = self.q_proj_decoder(decoder_hidden_states)
         if encoder_hidden_states is None:
             # Encoder KV already cached.

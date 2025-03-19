@@ -423,6 +423,7 @@ class DefaultModelLoader(BaseModelLoader):
                 model = _initialize_model(vllm_config=vllm_config)
 
             weights_to_load = {name for name, _ in model.named_parameters()}
+            
             loaded_weights = model.load_weights(
                 self._get_all_weights(model_config, model))
             self.counter_after_loading_weights = time.perf_counter()
@@ -1441,6 +1442,7 @@ class RunaiModelStreamerLoader(BaseModelLoader):
 
 def get_model_loader(load_config: LoadConfig) -> BaseModelLoader:
     """Get a model loader based on the load format."""
+    print(f"hosseins: get_model_loader() {load_config.load_format=}")
     if isinstance(load_config.load_format, type):
         return load_config.load_format(load_config)
 

@@ -14,6 +14,7 @@ from vllm.attention.backends.utils import CommonAttentionState
 # These are the 2 tunable parameters of the paged attention Pallas kernel.
 NUM_QUERIES_PER_BLOCK = 32
 NUM_KV_PAGES_PER_BLOCK = 128
+from vllm.distributed.utils import get_shard_spec
 
 
 class PallasAttentionBackend(AttentionBackend):
@@ -136,6 +137,8 @@ class PallasAttentionBackendImpl(AttentionImpl):
         attn_metadata: PallasMetadata,
         output: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
+        print("hosseins: PallasAttentionBackendImpl.forward()")
+        
         """Forward pass with Pallas attention.
 
         Args:
@@ -198,6 +201,17 @@ def write_to_kv_cache(
         v_cache = [num_blocks, block_size, num_kv_heads, head_size]
 
     """
+
+    print(f"hosseins: write_to_kv_cache() {key.shape=}")
+    print(f"hosseins: write_to_kv_cache() {get_shard_spec(key)=} {value.shape=}")
+    print(f"hosseins: write_to_kv_cache() {value.shape=}")
+    print(f"hosseins: write_to_kv_cache() {get_shard_spec(value)=} {value.shape=}")
+    print(f"hosseins: write_to_kv_cache() {key_cache.shape=}")
+    print(f"hosseins: write_to_kv_cache() {get_shard_spec(key_cache)=} {key_cache.shape=}")
+    print(f"hosseins: write_to_kv_cache() {value_cache.shape=}")
+    print(f"hosseins: write_to_kv_cache() {get_shard_spec(value_cache)=} {value_cache.shape=}")
+    print(f"hosseins: write_to_kv_cache() {slot_mapping.shape=}")
+    print(f"hosseins: write_to_kv_cache() {get_shard_spec(slot_mapping)=}")
     torch.ops.xla.dynamo_set_buffer_donor_(key_cache, True)
     torch.ops.xla.dynamo_set_buffer_donor_(value_cache, True)
 
