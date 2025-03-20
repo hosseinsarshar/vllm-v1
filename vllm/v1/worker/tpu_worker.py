@@ -82,7 +82,7 @@ class TPUWorker:
             self.profiler = xp.start_server(9012)
             profile_logdir = "/tmp/profile/"
             print(f"hosseins: starting the profile at [{envs.VLLM_TORCH_PROFILER_DIR}]")
-            duration_ms = 300000
+            duration_ms = 900000
             xp.trace_detached(f'localhost:{9012}', envs.VLLM_TORCH_PROFILER_DIR, duration_ms=duration_ms)
 
         if self.model_config.seed is None:

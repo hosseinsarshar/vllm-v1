@@ -52,7 +52,7 @@ class PallasAttentionBackend(AttentionBackend):
         raise RuntimeError("swap_blocks is not used for the TPU backend.")
 
     # hosseins: torch.compile
-    # @torch.compile(backend="openxla")
+    @torch.compile(backend="openxla")
     @staticmethod
     def copy_blocks(
         kv_caches: List[Tuple[torch.Tensor, torch.Tensor]],

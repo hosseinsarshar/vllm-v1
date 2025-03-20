@@ -683,10 +683,10 @@ class TPUModelRunner:
         self.model = model
 
         # hosseins: torch.compile
-        # self.model = torch.compile(model,
-        #                            backend="openxla",
-        #                            fullgraph=True,
-        #                            dynamic=False)
+        self.model = torch.compile(model,
+                                   backend="openxla",
+                                   fullgraph=True,
+                                   dynamic=False)
 
     def _dummy_run(
         self,
@@ -884,9 +884,9 @@ class ModelWrapperV1(nn.Module):
             inputs_embeds: The input embeddings of shape [num_tokens,
                 hidden_size]. It is used for multimodal models.
         """
-        print("hosseins: ModelWrapperV1.forward()")
-        print(f"hosseins: ModelWrapperV1 -> forward() 1 {get_shard_spec(input_ids)=}")
-        print(f"hosseins: ModelWrapperV1 -> forward() 1 {get_shard_spec(positions)=}")
+        # print("hosseins: ModelWrapperV1.forward()")
+        # print(f"hosseins: ModelWrapperV1 -> forward() 1 {get_shard_spec(input_ids)=}")
+        # print(f"hosseins: ModelWrapperV1 -> forward() 1 {get_shard_spec(positions)=}")
         # print(f"hosseins: ModelWrapperV1 -> forward() 1 {get_shard_spec(inputs_embeds)=}")
         assert self.model is not None
         
@@ -896,25 +896,25 @@ class ModelWrapperV1(nn.Module):
             inputs_embeds=inputs_embeds,
         )
 
-        print(f"hosseins: ModelWrapperV1 -> forward() 2 {get_shard_spec(hidden_states)=}")
-        print(f"hosseins: ModelWrapperV1 -> forward() 2 {get_shard_spec(input_ids)=}")
-        print(f"hosseins: ModelWrapperV1 -> forward() 2 {get_shard_spec(positions)=}")
+        # print(f"hosseins: ModelWrapperV1 -> forward() 2 {get_shard_spec(hidden_states)=}")
+        # print(f"hosseins: ModelWrapperV1 -> forward() 2 {get_shard_spec(input_ids)=}")
+        # print(f"hosseins: ModelWrapperV1 -> forward() 2 {get_shard_spec(positions)=}")
         # print(f"hosseins: ModelWrapperV1 -> forward() 2 {get_shard_spec(inputs_embeds)=}")
 
         return hidden_states
 
     # hosseins: torch.compile
-    # @torch.compile(backend="openxla", fullgraph=True, dynamic=False)
+    @torch.compile(backend="openxla", fullgraph=True, dynamic=False)
     def compute_logits(
         self,
         hidden_states: torch.Tensor,
         logits_indices: torch.Tensor,
         sampling_metadata,
     ) -> Optional[torch.Tensor]:
-        print(f"hosseins: ModelWrapperV1 -> compute_logits() {hidden_states.shape=}")
-        print(f"hosseins: ModelWrapperV1 -> compute_logits() {get_shard_spec(hidden_states)=}")
-        print(f"hosseins: ModelWrapperV1 -> compute_logits() {logits_indices.shape=}")
-        print(f"hosseins: ModelWrapperV1 -> compute_logits() {get_shard_spec(logits_indices)=}")
+        # print(f"hosseins: ModelWrapperV1 -> compute_logits() {hidden_states.shape=}")
+        # print(f"hosseins: ModelWrapperV1 -> compute_logits() {get_shard_spec(hidden_states)=}")
+        # print(f"hosseins: ModelWrapperV1 -> compute_logits() {logits_indices.shape=}")
+        # print(f"hosseins: ModelWrapperV1 -> compute_logits() {get_shard_spec(logits_indices)=}")
         hidden_states = hidden_states[logits_indices]
         logits = self.model.compute_logits(hidden_states, sampling_metadata)
         selected_token_ids = torch.argmax(logits, dim=-1, keepdim=True)
