@@ -47,6 +47,7 @@ from vllm.model_executor.model_loader.weight_utils import (
     default_weight_loader, maybe_remap_kv_scale_name)
 from vllm.model_executor.sampling_metadata import SamplingMetadata
 from vllm.sequence import IntermediateTensors
+import torch_xla.debug.profiler as xp
 
 from .interfaces import SupportsLoRA, SupportsPP
 from .utils import (AutoWeightsLoader, PPMissingLayer, extract_layer_index,
@@ -92,9 +93,10 @@ class LlamaMLP(nn.Module):
         # print(f"hosseins: LlamaMLP.forward() {x.device=}")
         # print(f"hosseins: LlamaMLP.forward() {get_shard_spec(x)=}")
 
-        x, _ = self.gate_up_proj(x)
-        x = self.act_fn(x)
-        x, _ = self.down_proj(x)
+        with xp.Trace("LlamaMLP.apply"):
+            x, _ = self.gate_up_proj(x)
+            x = self.act_fn(x)
+            x, _ = self.down_proj(x)
         return x
 
 
@@ -212,18 +214,23 @@ class LlamaAttention(nn.Module):
         # for name, param in self.qkv_proj.named_parameters():
         #     print(f"hosseins: LlamaAttention.forward() Name: {name}, Shape: {param.shape=}")
         #     print(f"hosseins: LlamaAttention.forward() {get_shard_spec(param)=}")
-
-        qkv, _ = self.qkv_proj(hidden_states)
+        with xp.Trace("LlamaAttention.forward.qkv_proj"):
+            qkv, _ = self.qkv_proj(hidden_states)
         # print(f"hosseins: LlamaAttention.forward() {qkv.shape=}")
         # print(f"hosseins: LlamaAttention.forward() {qkv.device=}")
         # print(f"hosseins: LlamaAttention.forward() {get_shard_spec(qkv)=}")
         # print(f"hosseins: LlamaAttention.forward() {_=}")
-        q, k, v = qkv.split([self.q_size, self.kv_size, self.kv_size], dim=-1)
-        q, k = self.rotary_emb(positions, q, k)
-        attn_output = self.attn(q, k, v)
+        with xp.Trace("LlamaAttention.forward.split"):
+            q, k, v = qkv.split([self.q_size, self.kv_size, self.kv_size], dim=-1)
+
+        with xp.Trace("LlamaAttention.forward.rotary_emb"):
+            q, k = self.rotary_emb(positions, q, k)
+        with xp.Trace("LlamaAttention.forward.attn"):
+            attn_output = self.attn(q, k, v)
         # print(f"hosseins: LlamaAttention.forward() {attn_output.shape=}")
         # print(f"hosseins: LlamaAttention.forward() {attn_output.device=}")
-        output, _ = self.o_proj(attn_output)
+        with xp.Trace("LlamaAttention.forward.o_proj"):
+            output, _ = self.o_proj(attn_output)
         # print(f"hosseins: LlamaAttention.forward() {output.shape=}")
         # print(f"hosseins: LlamaAttention.forward() {output.device=}")
         return output
@@ -293,24 +300,28 @@ class LlamaDecoderLayer(nn.Module):
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         # Self Attention
         # print("hosseins: LlamaDecoderLayer.forward()")
-        if residual is None:
-            residual = hidden_states
-            hidden_states = self.input_layernorm(hidden_states)
-        else:
-            hidden_states, residual = self.input_layernorm(
-                hidden_states, residual)
-        hidden_states = self.self_attn(positions=positions,
-                                       hidden_states=hidden_states)
+        with xp.Trace("LlamaDecoderLayer.forward.input_layernorm"):
+            if residual is None:
+                residual = hidden_states
+                hidden_states = self.input_layernorm(hidden_states)
+            else:
+                hidden_states, residual = self.input_layernorm(
+                    hidden_states, residual)
+                
+        with xp.Trace("LlamaDecoderLayer.forward.self_attn"):
+            hidden_states = self.self_attn(positions=positions,
+                                        hidden_states=hidden_states)
 
         # print(f"hosseins: LlamaDecoderLayer.forward() {hidden_states.shape=}")
         # print(f"hosseins: LlamaAttention.forward() {get_shard_spec(hidden_states)=}")
         # Fully Connected
-        hidden_states, residual = self.post_attention_layernorm(
-            hidden_states, residual)
+        with xp.Trace("LlamaDecoderLayer.forward.post_attention_layernorm"):
+            hidden_states, residual = self.post_attention_layernorm(
+                hidden_states, residual)
         # print(f"hosseins: LlamaDecoderLayer.forward() {residual.shape=}")
         # print(f"hosseins: LlamaAttention.forward() {get_shard_spec(residual)=}")
-        
-        hidden_states = self.mlp(hidden_states)
+        with xp.Trace("LlamaDecoderLayer.forward.mlp"):
+            hidden_states = self.mlp(hidden_states)
         # print(f"hosseins: LlamaDecoderLayer.forward() {hidden_states.shape=}")
         # print(f"hosseins: LlamaAttention.forward() {get_shard_spec(hidden_states)=}")
 
@@ -384,23 +395,26 @@ class LlamaModel(nn.Module):
     ) -> Union[torch.Tensor, IntermediateTensors]:
         # print("hosseins: LlamaModel.forward()")
         # print(f"hosseins: LlamaModel.forward() {get_pp_group().is_first_rank=}")
-        
-        if get_pp_group().is_first_rank:
-            if inputs_embeds is not None:
-                hidden_states = inputs_embeds
+        with xp.Trace("LlamaModel.forward.get_input_embeddings"):
+            if get_pp_group().is_first_rank:
+                if inputs_embeds is not None:
+                    hidden_states = inputs_embeds
+                else:
+                    hidden_states = self.get_input_embeddings(input_ids)
+                residual = None
             else:
-                hidden_states = self.get_input_embeddings(input_ids)
-            residual = None
-        else:
-            assert intermediate_tensors is not None
-            hidden_states = intermediate_tensors["hidden_states"]
-            residual = intermediate_tensors["residual"]
+                assert intermediate_tensors is not None
+                hidden_states = intermediate_tensors["hidden_states"]
+                residual = intermediate_tensors["residual"]
 
         # print(f"hosseins: LlamaModel.forward() 1 {get_shard_spec(hidden_states)=}")
         # print("hosseins: LlamaModel.forward() layer start")
-        for layer in self.layers[self.start_layer:self.end_layer]:
-            # self.get_layer_status(layer)
-            hidden_states, residual = layer(positions, hidden_states, residual)
+        counter = 0
+        with xp.Trace(f"LlamaModel.forward.layers"):
+            for layer in self.layers[self.start_layer:self.end_layer]:
+                with xp.Trace(f"LlamaModel.forward.layer{counter}"):
+                # self.get_layer_status(layer)
+                    hidden_states, residual = layer(positions, hidden_states, residual)
 
         # print("hosseins: LlamaModel.forward() layer end")
 
@@ -410,7 +424,8 @@ class LlamaModel(nn.Module):
                 "residual": residual
             })
         # print("hosseins: LlamaModel.forward() norm start")
-        hidden_states, _ = self.norm(hidden_states, residual)
+        with xp.Trace(f"LlamaModel.forward.norm"):
+            hidden_states, _ = self.norm(hidden_states, residual)
         # print("hosseins: LlamaModel.forward() norm end")
 
         return hidden_states
@@ -574,7 +589,8 @@ class LlamaForCausalLM(nn.Module, SupportsLoRA, SupportsPP):
         return LlamaModel(vllm_config=vllm_config, prefix=prefix)
 
     def get_input_embeddings(self, input_ids: torch.Tensor) -> torch.Tensor:
-        return self.model.get_input_embeddings(input_ids)
+        with xp.Trace(f"LlamaForCausalLM.get_input_embeddings"):
+            return self.model.get_input_embeddings(input_ids)
 
     def forward(
         self,
@@ -584,8 +600,9 @@ class LlamaForCausalLM(nn.Module, SupportsLoRA, SupportsPP):
         inputs_embeds: Optional[torch.Tensor] = None,
     ) -> Union[torch.Tensor, IntermediateTensors]:
         # print("hosseins: LlamaForCasualLM.forward()")
-        model_output = self.model(input_ids, positions, intermediate_tensors,
-                                  inputs_embeds)
+        with xp.Trace("LlamaForCausalLM.forward"):
+            model_output = self.model(input_ids, positions, intermediate_tensors,
+                                    inputs_embeds)
         return model_output
 
     def compute_logits(
@@ -593,13 +610,15 @@ class LlamaForCausalLM(nn.Module, SupportsLoRA, SupportsPP):
         hidden_states: torch.Tensor,
         sampling_metadata: SamplingMetadata,
     ) -> Optional[torch.Tensor]:
-        logits = self.logits_processor(self.lm_head, hidden_states,
-                                       sampling_metadata)
+        with xp.Trace("LlamaForCausalLM.compute_logits"):
+            logits = self.logits_processor(self.lm_head, hidden_states,
+                                        sampling_metadata)
         return logits
 
     def sample(self, logits: torch.Tensor,
                sampling_metadata: SamplingMetadata) -> Optional[SamplerOutput]:
-        next_tokens = self.sampler(logits, sampling_metadata)
+        with xp.Trace("LlamaForCausalLM.sampler"):
+            next_tokens = self.sampler(logits, sampling_metadata)
         return next_tokens
 
     def load_weights(self, weights: Iterable[Tuple[str,

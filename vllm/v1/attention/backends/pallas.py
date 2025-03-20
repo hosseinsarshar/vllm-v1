@@ -10,6 +10,7 @@ import torch_xla.experimental.custom_kernel  # noqa: F401
 from vllm.attention.backends.abstract import (AttentionBackend, AttentionImpl,
                                               AttentionLayer, AttentionType)
 from vllm.attention.backends.utils import CommonAttentionState
+import torch_xla.debug.profiler as xp
 
 # These are the 2 tunable parameters of the paged attention Pallas kernel.
 NUM_QUERIES_PER_BLOCK = 32
@@ -166,21 +167,23 @@ class PallasAttentionBackendImpl(AttentionImpl):
         key_cache, value_cache = kv_cache
         if kv_cache[0].numel() > 0:
             slot_mapping = attn_metadata.slot_mapping
-            write_to_kv_cache(key, value, key_cache, value_cache, slot_mapping)
+            with xp.Trace("Pallas.write_to_kv_cache"):
+                write_to_kv_cache(key, value, key_cache, value_cache, slot_mapping)
 
-        output = torch.ops.xla.ragged_paged_attention(
-            query,
-            key_cache,
-            value_cache,
-            attn_metadata.context_lens,
-            attn_metadata.block_tables,
-            attn_metadata.query_start_loc,
-            attn_metadata.num_seqs,
-            num_kv_pages_per_block=NUM_KV_PAGES_PER_BLOCK,
-            num_queries_per_block=NUM_QUERIES_PER_BLOCK,
-            vmem_limit_bytes=self.vmem_limit_bytes,
-            use_kernel=True,
-            sm_scale=self.scale)
+        with xp.Trace("Pallas.ragged_paged_attention"):
+            output = torch.ops.xla.ragged_paged_attention(
+                query,
+                key_cache,
+                value_cache,
+                attn_metadata.context_lens,
+                attn_metadata.block_tables,
+                attn_metadata.query_start_loc,
+                attn_metadata.num_seqs,
+                num_kv_pages_per_block=NUM_KV_PAGES_PER_BLOCK,
+                num_queries_per_block=NUM_QUERIES_PER_BLOCK,
+                vmem_limit_bytes=self.vmem_limit_bytes,
+                use_kernel=True,
+                sm_scale=self.scale)
 
         return output.reshape(num_tokens, hidden_size)
 
