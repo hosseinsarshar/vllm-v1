@@ -41,17 +41,17 @@ class UnquantizedEmbeddingMethod(QuantizeMethodBase):
               layer: torch.nn.Module,
               x: torch.Tensor,
               bias: Optional[torch.Tensor] = None) -> torch.Tensor:
-        print(f"hosseins: UnquantizedEmbeddingMethod -> apply()")
-        print(f"hosseins: UnquantizedEmbeddingMethod -> apply() [{layer.weight.shape=}]")
-        print(f"hosseins: UnquantizedEmbeddingMethod -> apply() [{layer.weight.device=}]")
+        # print(f"hosseins: UnquantizedEmbeddingMethod -> apply()")
+        # print(f"hosseins: UnquantizedEmbeddingMethod -> apply() [{layer.weight.shape=}]")
+        # print(f"hosseins: UnquantizedEmbeddingMethod -> apply() [{layer.weight.device=}]")
 
         return F.linear(x, layer.weight, bias)
 
     def embedding(self, layer: torch.nn.Module,
                   input_: torch.Tensor) -> torch.Tensor:
-        print(f"hosseins: UnquantizedEmbeddingMethod -> embedding()")
-        print(f"hosseins: UnquantizedEmbeddingMethod -> embedding() [{layer.weight.shape=}]")
-        print(f"hosseins: UnquantizedEmbeddingMethod -> embedding() [{layer.weight.device=}]")
+        # print(f"hosseins: UnquantizedEmbeddingMethod -> embedding()")
+        # print(f"hosseins: UnquantizedEmbeddingMethod -> embedding() [{layer.weight.shape=}]")
+        # print(f"hosseins: UnquantizedEmbeddingMethod -> embedding() [{layer.weight.device=}]")
         return F.embedding(input_, layer.weight)
 
 
@@ -143,7 +143,7 @@ class VocabParallelEmbeddingShardIndices:
         assert self.num_added_elements <= self.num_added_elements_padded
 
 # hosseins: torch.compile
-# @torch.compile(dynamic=True, backend=current_platform.simple_compile_backend)
+@torch.compile(dynamic=True, backend=current_platform.simple_compile_backend)
 def get_masked_input_and_mask(
         input_: torch.Tensor, org_vocab_start_index: int,
         org_vocab_end_index: int, num_org_vocab_padding: int,
@@ -415,7 +415,7 @@ class VocabParallelEmbedding(torch.nn.Module):
         # shard_spmd(data=param.data, mesh=self.mesh, partition_spec=get_col_parallel_partition_spec())
 
     def forward(self, input_):
-        print("hosseins: VocabParallelEmbedding.forward()")
+        # print("hosseins: VocabParallelEmbedding.forward()")
         if self.tp_size > 1:
             # Build the mask.
             masked_input, input_mask = get_masked_input_and_mask(
@@ -426,17 +426,17 @@ class VocabParallelEmbedding(torch.nn.Module):
                 self.shard_indices.added_vocab_end_index)
         else:
             masked_input = input_
-        print(f"hosseins: VocabParallelEmbedding.forward() [{get_shard_spec(masked_input)=}]")
+        # print(f"hosseins: VocabParallelEmbedding.forward() [{get_shard_spec(masked_input)=}]")
         # Get the embeddings.
         output_parallel = self.quant_method.embedding(self,
                                                       masked_input.long())
-        print(f"hosseins: VocabParallelEmbedding.forward() [{get_shard_spec(output_parallel)=}]")
+        # print(f"hosseins: VocabParallelEmbedding.forward() [{get_shard_spec(output_parallel)=}]")
         # Mask the output embedding.
         if self.tp_size > 1:
             output_parallel.masked_fill_(input_mask.unsqueeze(-1), 0)
         # Reduce across all the model parallel GPUs.
         output = tensor_model_parallel_all_reduce(output_parallel)
-        print(f"hosseins: VocabParallelEmbedding.forward() [{get_shard_spec(output)=}]")
+        # print(f"hosseins: VocabParallelEmbedding.forward() [{get_shard_spec(output)=}]")
         return output
 
     def extra_repr(self) -> str:

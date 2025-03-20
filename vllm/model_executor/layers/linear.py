@@ -145,12 +145,14 @@ class UnquantizedLinearMethod(LinearMethodBase):
               layer: torch.nn.Module,
               x: torch.Tensor,
               bias: Optional[torch.Tensor] = None) -> torch.Tensor:
-        print(f"hosseins: UnquantizedLinearMethod -> apply() {layer.weight.shape=} {get_shard_spec(layer.weight)=}")
-        print(f"hosseins: UnquantizedLinearMethod -> apply() {x.shape=} {get_shard_spec(x)=}")
+        # print(f"hosseins: UnquantizedLinearMethod -> apply() {layer.weight.shape=} {get_shard_spec(layer.weight)=}")
+        # print(f"hosseins: UnquantizedLinearMethod -> apply() {x.shape=} {get_shard_spec(x)=}")
+        # for name, param in layer.named_parameters():
+        #     print(f"hosseins: UnquantizedLinearMethod -> apply() {name=}")
 
         out = F.linear(x, layer.weight, bias)
         # mark sharding (as it's lazy - this is the hint not the actual execution of the graph) or xm.mark_step() for debug
-        print(f"hosseins: UnquantizedLinearMethod -> apply() {out.shape=} {get_shard_spec(out)=}")
+        # print(f"hosseins: UnquantizedLinearMethod -> apply() {out.shape=} {get_shard_spec(out)=}")
 
         return out
 
@@ -280,7 +282,7 @@ class ReplicatedLinear(LinearBase):
     def forward(
         self, x: torch.Tensor
     ) -> Union[torch.Tensor, tuple[torch.Tensor, Optional[Parameter]]]:
-        print(f"hosseins: ReplicatedLinear -> forward() {type(self)=}")
+        # print(f"hosseins: ReplicatedLinear -> forward() {type(self)=}")
         
         bias = self.bias if not self.skip_bias_add else None
         assert self.quant_method is not None
@@ -434,8 +436,8 @@ class ColumnParallelLinear(LinearBase):
     def forward(
         self, input_
     ) -> Union[torch.Tensor, tuple[torch.Tensor, Optional[Parameter]]]:
-        print(f"hosseins: ColumnParallelLinear -> forward() {type(self)=}")
-        print(f"hosseins: ColumnParallelLinear -> forward() {type(self.quant_method)=}")
+        # print(f"hosseins: ColumnParallelLinear -> forward() {type(self)=}")
+        # print(f"hosseins: ColumnParallelLinear -> forward() {type(self.quant_method)=}")
         bias = self.bias if not self.skip_bias_add else None
 
         # Matrix multiply.
@@ -447,7 +449,7 @@ class ColumnParallelLinear(LinearBase):
         else:
             output = output_parallel
 
-        print(f"hosseins: ColumnParallelLinear -> forward() {get_shard_spec(output)=}")
+        # print(f"hosseins: ColumnParallelLinear -> forward() {get_shard_spec(output)=}")
         output_bias = self.bias if self.skip_bias_add else None
         if not self.return_bias:
             return output
@@ -1274,7 +1276,7 @@ class RowParallelLinear(LinearBase):
     def forward(
         self, input_
     ) -> Union[torch.Tensor, tuple[torch.Tensor, Optional[Parameter]]]:
-        print(f"hosseins: RowParallelLinear -> forward() {type(self)=}")
+        # print(f"hosseins: RowParallelLinear -> forward() {type(self)=}")
         if self.input_is_parallel:
             input_parallel = input_
         else:
@@ -1370,7 +1372,7 @@ class QKVCrossParallelLinear(torch.nn.Module):
         return self.proj["kv_proj_encoder"]
 
     def forward(self, decoder_hidden_states, encoder_hidden_states):
-        print(f"hosseins: QKVCrossParallelLinear -> forward() {type(self)=}")
+        # print(f"hosseins: QKVCrossParallelLinear -> forward() {type(self)=}")
 
         q, _ = self.q_proj_decoder(decoder_hidden_states)
         if encoder_hidden_states is None:
