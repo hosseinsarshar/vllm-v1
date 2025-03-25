@@ -409,6 +409,7 @@ class ColumnParallelLinear(LinearBase):
             param.materialize(final_shape, dtype=loaded_weight.dtype)
 
         param_data = param.data
+        shard_spmd(param_data.data, self.mesh, get_col_parallel_partition_spec())
         if output_dim is not None and not is_sharded_weight:
             shard_size = param_data.shape[output_dim]
             start_idx = tp_rank * shard_size
@@ -422,6 +423,7 @@ class ColumnParallelLinear(LinearBase):
 
         assert param_data.shape == loaded_weight.shape
         param_data.copy_(loaded_weight)
+        shard_spmd(param_data.data, self.mesh, get_col_parallel_partition_spec())
 
     def weight_loader_v2(self, param: Parameter, loaded_weight: torch.Tensor):
         # Special case for loading scales off disk, which often do not
@@ -436,6 +438,7 @@ class ColumnParallelLinear(LinearBase):
     ) -> Union[torch.Tensor, tuple[torch.Tensor, Optional[Parameter]]]:
         print(f"hosseins: ColumnParallelLinear -> forward() {type(self)=}")
         print(f"hosseins: ColumnParallelLinear -> forward() {type(self.quant_method)=}")
+        print(f"hosseins: ColumnParallelLinear -> forward() {input_.shape=}")
         bias = self.bias if not self.skip_bias_add else None
 
         # Matrix multiply.
@@ -811,6 +814,10 @@ class QKVParallelLinear(ColumnParallelLinear):
         *,
         return_bias: bool = True,
     ):
+        print(f"hidden_size: {hidden_size=}")
+        print(f"head_size: {head_size=}")
+        print(f"total_num_heads: {total_num_heads=}")
+        print(f"total_num_kv_heads: {total_num_kv_heads=}")
         self.hidden_size = hidden_size
         self.head_size = head_size
         self.total_num_heads = total_num_heads
