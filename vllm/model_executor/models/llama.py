@@ -35,6 +35,7 @@ from vllm.distributed import get_pp_group, get_tensor_model_parallel_world_size
 from vllm.model_executor.layers.activation import SiluAndMul
 from vllm.model_executor.layers.layernorm import RMSNorm
 from vllm.model_executor.layers.linear import (MergedColumnParallelLinear,
+                                               ColumnParallelLinear,
                                                QKVParallelLinear,
                                                RowParallelLinear)
 from vllm.model_executor.layers.logits_processor import LogitsProcessor
@@ -137,14 +138,41 @@ class LlamaAttention(nn.Module):
         self.rope_theta = rope_theta
         self.max_position_embeddings = max_position_embeddings
 
-        self.qkv_proj = QKVParallelLinear(
-            hidden_size=hidden_size,
-            head_size=self.head_dim,
-            total_num_heads=self.total_num_heads,
-            total_num_kv_heads=self.total_num_kv_heads,
+        # self.qkv_proj = QKVParallelLinear(
+        #     hidden_size=hidden_size,
+        #     head_size=self.head_dim,
+        #     total_num_heads=self.total_num_heads,
+        #     total_num_kv_heads=self.total_num_kv_heads,
+        #     bias=bias,
+        #     quant_config=quant_config,
+        #     prefix=f"{prefix}.qkv_proj",
+        # )
+
+        self.q_proj = ColumnParallelLinear(
+            input_size=hidden_size,
+            output_size=self.q_size,
+            gather_output=False,
             bias=bias,
             quant_config=quant_config,
-            prefix=f"{prefix}.qkv_proj",
+            prefix=f"{prefix}.q_proj",
+        )
+
+        self.k_proj = ColumnParallelLinear(
+            input_size=hidden_size,
+            output_size=self.kv_size,
+            gather_output=False,
+            bias=bias,
+            quant_config=quant_config,
+            prefix=f"{prefix}.k_proj",
+        )
+
+        self.v_proj = ColumnParallelLinear(
+            input_size=hidden_size,
+            output_size=self.kv_size,
+            gather_output=False,
+            bias=bias,
+            quant_config=quant_config,
+            prefix=f"{prefix}.v_proj",
         )
 
         self.o_proj = RowParallelLinear(
@@ -198,8 +226,12 @@ class LlamaAttention(nn.Module):
         positions: torch.Tensor,
         hidden_states: torch.Tensor,
     ) -> torch.Tensor:
-        qkv, _ = self.qkv_proj(hidden_states)
-        q, k, v = qkv.split([self.q_size, self.kv_size, self.kv_size], dim=-1)
+        q, _ = self.q_proj(hidden_states)
+        k, _ = self.k_proj(hidden_states)
+        v, _ = self.v_proj(hidden_states)
+
+        # q, k, v = qkv.split([self.q_size, self.kv_size, self.kv_size], dim=-1)
+
         q, k = self.rotary_emb(positions, q, k)
         attn_output = self.attn(q, k, v)
         output, _ = self.o_proj(attn_output)
@@ -370,9 +402,9 @@ class LlamaModel(nn.Module):
                                                    torch.Tensor]]) -> Set[str]:
         stacked_params_mapping = [
             # (param_name, shard_name, shard_id)
-            (".qkv_proj", ".q_proj", "q"),
-            (".qkv_proj", ".k_proj", "k"),
-            (".qkv_proj", ".v_proj", "v"),
+            # (".qkv_proj", ".q_proj", "q"),
+            # (".qkv_proj", ".k_proj", "k"),
+            # (".qkv_proj", ".v_proj", "v"),
             (".gate_up_proj", ".gate_proj", 0),
             (".gate_up_proj", ".up_proj", 1),
         ]
