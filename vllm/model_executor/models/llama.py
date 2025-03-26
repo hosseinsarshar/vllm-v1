@@ -89,13 +89,22 @@ class LlamaMLP(nn.Module):
 
     def forward(self, x):
         print("hosseins: LlamaMLP.forward()")
-        print(f"hosseins: LlamaMLP.forward() {x.shape=}")
-        print(f"hosseins: LlamaMLP.forward() {x.device=}")
-        print(f"hosseins: LlamaMLP.forward() {get_shard_spec(x)=}")
+        print(f"hosseins: LlamaMLP.forward() 1 {x.shape=}")
+        print(f"hosseins: LlamaMLP.forward() 1 {x.device=}")
+        print(f"hosseins: LlamaMLP.forward() 1 {get_shard_spec(x)=}")
 
         x, _ = self.gate_up_proj(x)
+        print(f"hosseins: LlamaMLP.forward() 2 {x.shape=}")
+        print(f"hosseins: LlamaMLP.forward() 2 {x.device=}")
+        print(f"hosseins: LlamaMLP.forward() 2 {get_shard_spec(x)=}")
         x = self.act_fn(x)
+        print(f"hosseins: LlamaMLP.forward() 3 {x.shape=}")
+        print(f"hosseins: LlamaMLP.forward() 3 {x.device=}")
+        print(f"hosseins: LlamaMLP.forward() 3 {get_shard_spec(x)=}")
         x, _ = self.down_proj(x)
+        print(f"hosseins: LlamaMLP.forward() 4 {x.shape=}")
+        print(f"hosseins: LlamaMLP.forward() 4 {x.device=}")
+        print(f"hosseins: LlamaMLP.forward() 4 {get_shard_spec(x)=}")
         return x
 
 
@@ -257,11 +266,14 @@ class LlamaAttention(nn.Module):
         # print(f"hosseins: LlamaAttention.forward() {_=}")
         # q, k, v = qkv.split([self.q_size, self.kv_size, self.kv_size], dim=-1)
         
-        print(f"hosseins: LlamaAttention.forward() {q.shape=}")
-        print(f"hosseins: LlamaAttention.forward() {k.shape=}")
-        print(f"hosseins: LlamaAttention.forward() {v.shape=}")
+        print(f"hosseins: LlamaAttention.forward() 1 {q.shape=}")
+        print(f"hosseins: LlamaAttention.forward() 1 {k.shape=}")
+        print(f"hosseins: LlamaAttention.forward() 1 {v.shape=}")
 
         q, k = self.rotary_emb(positions, q, k)
+        print(f"hosseins: LlamaAttention.forward() 2 {q.shape=}")
+        print(f"hosseins: LlamaAttention.forward() 2 {k.shape=}")
+        print(f"hosseins: LlamaAttention.forward() 2 {v.shape=}")
         attn_output = self.attn(q, k, v)
         print(f"hosseins: LlamaAttention.forward() {attn_output.shape=}")
         print(f"hosseins: LlamaAttention.forward() {attn_output.device=}")
@@ -335,26 +347,41 @@ class LlamaDecoderLayer(nn.Module):
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         # Self Attention
         print("hosseins: LlamaDecoderLayer.forward()")
+        print(f"hosseins: LlamaDecoderLayer.forward() {(residual is None)=}")
         if residual is None:
             residual = hidden_states
+            print(f"hosseins: LlamaDecoderLayer.forward() 1 {hidden_states.shape=}")
+            print(f"hosseins: LlamaDecoderLayer.forward() 1 {get_shard_spec(hidden_states)=}")
+
             hidden_states = self.input_layernorm(hidden_states)
+            print(f"hosseins: LlamaDecoderLayer.forward() 2 {hidden_states.shape=}")
+            print(f"hosseins: LlamaDecoderLayer.forward() 2 {get_shard_spec(hidden_states)=}")
         else:
+            print(f"hosseins: LlamaDecoderLayer.forward() 1 {hidden_states.shape=}")
+            print(f"hosseins: LlamaDecoderLayer.forward() 1 {get_shard_spec(hidden_states)=}")
             hidden_states, residual = self.input_layernorm(
                 hidden_states, residual)
+            print(f"hosseins: LlamaDecoderLayer.forward() 2 {hidden_states.shape=}")
+            print(f"hosseins: LlamaDecoderLayer.forward() 2 {get_shard_spec(hidden_states)=}")
+            print(f"hosseins: LlamaDecoderLayer.forward() 2 {residual.shape=}")
+            print(f"hosseins: LlamaDecoderLayer.forward() 2 {get_shard_spec(residual)=}")
+
+        print(f"hosseins: LlamaDecoderLayer.forward() {self.self_attn=}")
+        print(f"hosseins: LlamaDecoderLayer.forward() {positions.shape=}")
         hidden_states = self.self_attn(positions=positions,
                                        hidden_states=hidden_states)
 
-        print(f"hosseins: LlamaDecoderLayer.forward() {hidden_states.shape=}")
-        print(f"hosseins: LlamaAttention.forward() {get_shard_spec(hidden_states)=}")
+        print(f"hosseins: LlamaDecoderLayer.forward() 3 {hidden_states.shape=}")
+        print(f"hosseins: LlamaDecoderLayer.forward() 3 {get_shard_spec(hidden_states)=}")
         # Fully Connected
         hidden_states, residual = self.post_attention_layernorm(
             hidden_states, residual)
         print(f"hosseins: LlamaDecoderLayer.forward() {residual.shape=}")
-        print(f"hosseins: LlamaAttention.forward() {get_shard_spec(residual)=}")
+        print(f"hosseins: LlamaDecoderLayer.forward() {get_shard_spec(residual)=}")
         
         hidden_states = self.mlp(hidden_states)
         print(f"hosseins: LlamaDecoderLayer.forward() {hidden_states.shape=}")
-        print(f"hosseins: LlamaAttention.forward() {get_shard_spec(hidden_states)=}")
+        print(f"hosseins: LlamaDecoderLayer.forward() {get_shard_spec(hidden_states)=}")
 
         return hidden_states, residual
 

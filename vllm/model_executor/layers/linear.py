@@ -424,6 +424,9 @@ class ColumnParallelLinear(LinearBase):
         assert param_data.shape == loaded_weight.shape
         param_data.copy_(loaded_weight)
         shard_spmd(param_data.data, self.mesh, get_col_parallel_partition_spec())
+        shard_spmd(param.data, self.mesh, get_col_parallel_partition_spec())
+        print(f"hosseins: ColumnParallelLinear -> weight_loader() {get_shard_spec(param.data)=}")
+
 
     def weight_loader_v2(self, param: Parameter, loaded_weight: torch.Tensor):
         # Special case for loading scales off disk, which often do not
