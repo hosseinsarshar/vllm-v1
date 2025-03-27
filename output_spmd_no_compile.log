@@ -1,0 +1,52 @@
+nohup: ignoring input
+Traceback (most recent call last):
+  File "/home/hosseins/miniconda3/envs/vllm-v1/bin/vllm", line 33, in <module>
+    sys.exit(load_entry_point('vllm', 'console_scripts', 'vllm')())
+  File "/home/hosseins/miniconda3/envs/vllm-v1/bin/vllm", line 25, in importlib_load_entry_point
+    return next(matches).load()
+  File "/home/hosseins/miniconda3/envs/vllm-v1/lib/python3.10/importlib/metadata/__init__.py", line 171, in load
+    module = import_module(match.group('module'))
+  File "/home/hosseins/miniconda3/envs/vllm-v1/lib/python3.10/importlib/__init__.py", line 126, in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+  File "<frozen importlib._bootstrap>", line 1050, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 1027, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 992, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 241, in _call_with_frames_removed
+  File "<frozen importlib._bootstrap>", line 1050, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 1027, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 992, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 241, in _call_with_frames_removed
+  File "<frozen importlib._bootstrap>", line 1050, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 1027, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 992, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 241, in _call_with_frames_removed
+  File "<frozen importlib._bootstrap>", line 1050, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 1027, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1006, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 688, in _load_unlocked
+  File "<frozen importlib._bootstrap_external>", line 883, in exec_module
+  File "<frozen importlib._bootstrap>", line 241, in _call_with_frames_removed
+  File "/home/hosseins/vllm-v1/vllm/__init__.py", line 9, in <module>
+    import torch
+  File "/home/hosseins/miniconda3/envs/vllm-v1/lib/python3.10/site-packages/torch/__init__.py", line 2128, in <module>
+    from torch import _VF as _VF, functional as functional  # usort: skip
+  File "/home/hosseins/miniconda3/envs/vllm-v1/lib/python3.10/site-packages/torch/functional.py", line 8, in <module>
+    import torch.nn.functional as F
+  File "/home/hosseins/miniconda3/envs/vllm-v1/lib/python3.10/site-packages/torch/nn/__init__.py", line 8, in <module>
+    from torch.nn.modules import *  # usort: skip # noqa: F403
+  File "/home/hosseins/miniconda3/envs/vllm-v1/lib/python3.10/site-packages/torch/nn/modules/__init__.py", line 1, in <module>
+    from .module import Module  # usort: skip
+  File "/home/hosseins/miniconda3/envs/vllm-v1/lib/python3.10/site-packages/torch/nn/modules/module.py", line 17, in <module>
+    from torch.utils._python_dispatch import is_traceable_wrapper_subclass
+  File "/home/hosseins/miniconda3/envs/vllm-v1/lib/python3.10/site-packages/torch/utils/__init__.py", line 8, in <module>
+    from torch.utils import (
+  File "/home/hosseins/miniconda3/envs/vllm-v1/lib/python3.10/site-packages/torch/utils/data/__init__.py", line 1, in <module>
+    from torch.utils.data.dataloader import (
+  File "/home/hosseins/miniconda3/envs/vllm-v1/lib/python3.10/site-packages/torch/utils/data/dataloader.py", line 22, in <module>
+    import torch.utils.data.graph_settings
+  File "/home/hosseins/miniconda3/envs/vllm-v1/lib/python3.10/site-packages/torch/utils/data/graph_settings.py", line 8, in <module>
+    from torch.utils.data.datapipes.iter.sharding import (
+  File "/home/hosseins/miniconda3/envs/vllm-v1/lib/python3.10/site-packages/torch/utils/data/datapipes/__init__.py", line 1, in <module>
+    from torch.utils.data.datapipes import dataframe as dataframe, iter as iter, map as map
+  File "/home/hosseins/miniconda3/envs/vllm-v1/lib/python3.10/site-packages/torch/utils/data/datapipes/dataframe/__init__.py", line 1, in <module>
+    from torch.utils.data.datapipes.dataframe.dataframes imp
