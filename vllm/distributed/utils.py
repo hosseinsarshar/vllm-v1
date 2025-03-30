@@ -413,10 +413,10 @@ def shard_spmd(data, mesh=None, partition_spec=None, show_visual=False, print_sh
 
 def get_shard_spec(tensor, show_visual=True):
     # # logger.info(f"hosseins: get_shard_spec() -> [{type(tensor)=}]")
-    # xm.mark_step()
     if not is_spmd(): 
         return None
     
+    xm.mark_step()
     sharding = torch_xla._XLAC._get_xla_sharding_spec(tensor)
     if show_visual:
         # logger.info("hosseins: after sharding param")

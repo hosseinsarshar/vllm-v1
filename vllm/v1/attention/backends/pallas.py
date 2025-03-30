@@ -15,6 +15,7 @@ from vllm.attention.backends.utils import CommonAttentionState
 NUM_QUERIES_PER_BLOCK = 32
 NUM_KV_PAGES_PER_BLOCK = 128
 from vllm.distributed.utils import get_shard_spec
+import torch_xla.debug.profiler as xp
 
 
 class PallasAttentionBackend(AttentionBackend):
@@ -159,15 +160,18 @@ class PallasAttentionBackendImpl(AttentionImpl):
 
         assert layer._k_scale_float == 1.0 and layer._v_scale_float == 1.0
         num_tokens, hidden_size = query.shape
+        # with xp.Trace("PallasAttentionBackend.forward.view()"):
         query = query.view(num_tokens, self.num_heads, self.head_size)
         key = key.view(num_tokens, self.num_kv_heads, self.head_size)
         value = value.view(num_tokens, self.num_kv_heads, self.head_size)
 
         key_cache, value_cache = kv_cache
+        # with xp.Trace("PallasAttentionBackend.forward.write_to_kv_cache()"):
         if kv_cache[0].numel() > 0:
             slot_mapping = attn_metadata.slot_mapping
             write_to_kv_cache(key, value, key_cache, value_cache, slot_mapping)
 
+        # with xp.Trace("PallasAttentionBackend.forward.ragged_paged_attention()"):
         output = torch.ops.xla.ragged_paged_attention(
             query,
             key_cache,
