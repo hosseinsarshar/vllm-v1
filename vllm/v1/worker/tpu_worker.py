@@ -84,9 +84,9 @@ class TPUWorker:
             self.profile_dir = envs.VLLM_TORCH_PROFILER_DIR
             logger.info("Profiling enabled. Traces will be saved to: %s",
                         self.profile_dir)
-
+            self.profiler = xp.start_server(9012)
             print(f"hosseins: starting the profile at [{envs.VLLM_TORCH_PROFILER_DIR}]")
-            duration_ms = 300000
+            duration_ms = 800000
             xp.trace_detached(f'localhost:{9012}', envs.VLLM_TORCH_PROFILER_DIR, duration_ms=duration_ms)
 
         if self.model_config.seed is None:
@@ -225,7 +225,7 @@ class TPUWorker:
         """Allocate GPU KV cache with the specified kv_cache_config."""
         print(f"hosseins: initialize_from_config() {kv_cache_config=}")
         self.model_runner.initialize_kv_cache(kv_cache_config)
-        
+
 
     def check_health(self) -> None:
         # worker will always be healthy as long as it's running.
