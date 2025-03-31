@@ -2,7 +2,8 @@
 /vllm/_version.py
 
 # vllm-flash-attn built from source
-vllm/vllm_flash_attn/
+vllm/vllm_flash_attn/*
+!vllm/vllm_flash_attn/fa_utils.py
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -66,7 +67,6 @@ cover/
 *.pot
 
 # Django stuff:
-*.log
 local_settings.py
 db.sqlite3
 db.sqlite3-journal

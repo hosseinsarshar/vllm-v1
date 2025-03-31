@@ -55,6 +55,9 @@ class TPUWorker(LoRANotSupportedWorkerBase, LocalOrDistributedWorkerBase):
             vllm_config=vllm_config, is_driver_worker=is_driver_worker)
         
 
+        if self.model_config.seed is None:
+            self.model_config.seed = 0
+
     def init_device(self) -> None:
         os.environ["PJRT_DEVICE"] = "TPU"
         torch.set_grad_enabled(False)
@@ -95,9 +98,16 @@ class TPUWorker(LoRANotSupportedWorkerBase, LocalOrDistributedWorkerBase):
         # can have slightly different XLA graphs.
         world_size = self.parallel_config.world_size
         rank = xr.global_ordinal()
-        per_rank_path = os.path.join(envs.VLLM_XLA_CACHE_PATH,
-                                     f"tp{world_size}_rank{rank}")
-        xr.initialize_cache(per_rank_path, readonly=False)
+        # The PyTorch/XLA compilation cache uses the Torch IR to generate keys.
+        # Consequently, changes in optimization flags, which affect compilation
+        # results, don't change the cache key. This can result in the wrong
+        # compilation being used. To prevent this, disabling the XLA compilation
+        # cache during development is recommended.We can disable it by
+        # `export VLLM_XLA_CACHE_PATH=`
+        if envs.VLLM_XLA_CACHE_PATH:
+            per_rank_path = os.path.join(envs.VLLM_XLA_CACHE_PATH,
+                                         f"tp{world_size}_rank{rank}")
+            xr.initialize_cache(per_rank_path, readonly=False)
 
         self.profiler = None
         if envs.VLLM_TORCH_PROFILER_DIR and self.rank < 1:
@@ -107,6 +117,8 @@ class TPUWorker(LoRANotSupportedWorkerBase, LocalOrDistributedWorkerBase):
             logger.info("Profiling enabled. Traces will be saved to: %s",
                         self.profile_dir)
             self.profiler = xp.start_server(9012)
+            duration_ms = 800000
+            xp.trace_detached(f'localhost:{9012}', self.profile_dir, duration_ms=duration_ms)
 
     def start_profile(self):
         if self.rank < 1:

@@ -54,6 +54,7 @@ from .utils import (AutoWeightsLoader, PPMissingLayer, extract_layer_index,
                     make_empty_intermediate_tensors_factory, make_layers,
                     maybe_prefix)
 from vllm.distributed.utils import get_shard_spec
+import torch_xla.debug.profiler as xp
 
 class LlamaMLP(nn.Module):
 
@@ -385,11 +386,12 @@ class LlamaModel(nn.Module):
         # print("hosseins: LlamaModel.forward()")
         # print(f"hosseins: LlamaModel.forward() {get_pp_group().is_first_rank=}")
         
+        # with xp.Trace("LlamaModel.forward.get_input_embeddings()"):
         if get_pp_group().is_first_rank:
             if inputs_embeds is not None:
                 hidden_states = inputs_embeds
             else:
-                hidden_states = self.get_input_embeddings(input_ids)
+                    hidden_states = self.get_input_embeddings(input_ids)
             residual = None
         else:
             assert intermediate_tensors is not None
@@ -399,8 +401,10 @@ class LlamaModel(nn.Module):
         # print(f"hosseins: LlamaModel.forward() 1 {get_shard_spec(hidden_states)=}")
         # print("hosseins: LlamaModel.forward() layer start")
         for layer in self.layers[self.start_layer:self.end_layer]:
-            # self.get_layer_status(layer)
+            self.get_layer_status(layer)
+            # with xp.Trace(f"LlamaModel.forward.layer() [{counter}]"):
             hidden_states, residual = layer(positions, hidden_states, residual)
+            counter += 1
 
         # print("hosseins: LlamaModel.forward() layer end")
 
@@ -585,7 +589,7 @@ class LlamaForCausalLM(nn.Module, SupportsLoRA, SupportsPP):
     ) -> Union[torch.Tensor, IntermediateTensors]:
         # print("hosseins: LlamaForCasualLM.forward()")
         model_output = self.model(input_ids, positions, intermediate_tensors,
-                                  inputs_embeds)
+                                    inputs_embeds)
         return model_output
 
     def compute_logits(
