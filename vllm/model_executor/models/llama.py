@@ -430,6 +430,14 @@ class LlamaModel(nn.Module):
                                         default_weight_loader)
                 weight_loader(param, loaded_weight)
             loaded_params.add(name)
+
+        print("hosseins: ============================= Layers Loaded =============================")
+
+        params_dict = dict(self.named_parameters())
+        for params_name in dict(self.named_parameters()):
+            param = params_dict[params_name]
+            print(f"hosseins: [{params_name}] - [{param.shape}]")
+        
         return loaded_params
 
 

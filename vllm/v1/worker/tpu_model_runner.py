@@ -861,6 +861,7 @@ class TPUModelRunner:
                         kv_cache_spec.num_kv_heads, kv_cache_spec.head_size)
                     dtype = kv_cache_spec.dtype
 
+                    print(f"hosseins: [{kv_cache_shape=}]")
                     tpu_kv_cache = torch.zeros(kv_cache_shape,
                                                dtype=dtype,
                                                device=self.device)
