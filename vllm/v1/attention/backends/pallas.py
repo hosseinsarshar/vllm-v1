@@ -14,6 +14,8 @@ from vllm.attention.backends.utils import CommonAttentionState
 # These are the 2 tunable parameters of the paged attention Pallas kernel.
 NUM_QUERIES_PER_BLOCK = 32
 NUM_KV_PAGES_PER_BLOCK = 128
+from vllm.distributed.utils import get_shard_spec
+import torch_xla.debug.profiler as xp
 
 
 class PallasAttentionBackend(AttentionBackend):
@@ -41,7 +43,7 @@ class PallasAttentionBackend(AttentionBackend):
         num_kv_heads: int,
         head_size: int,
     ) -> tuple[int, ...]:
-        return (num_blocks, block_size, num_kv_heads, head_size)
+        return (num_blocks, block_size, num_kv_heads * 2, head_size)
 
     @staticmethod
     def swap_blocks(
@@ -132,52 +134,52 @@ class PallasAttentionBackendImpl(AttentionImpl):
         query: torch.Tensor,
         key: torch.Tensor,
         value: torch.Tensor,
-        kv_cache: tuple[torch.Tensor, torch.Tensor],
+        kv_cache: torch.Tensor,
         attn_metadata: PallasMetadata,
         output: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
+        print("hosseins: PallasAttentionBackendImpl.forward()")
+        
         """Forward pass with Pallas attention.
 
         Args:
             query: shape = [num_tokens, num_heads * head_size]
             key: shape = [num_tokens, num_kv_heads * head_size]
             value: shape = [num_tokens, num_kv_heads * head_size]
-            kv_cache = ([num_blocks, block_size, num_kv_heads, head_size], 
-                        [num_blocks, block_size, num_kv_heads, head_size])
+            kv_cache = [num_blocks, block_size, num_kv_heads * 2, head_size]
             attn_metadata: Metadata for attention.
         Returns:
             shape = [num_tokens, num_heads * head_size]
         """
         # For determine_available_memory case.
-        if kv_cache[0].numel() == 0:
+        if kv_cache.numel() == 0:
             if output is None:
                 output = torch.ones_like(query)
             return output
 
         assert layer._k_scale_float == 1.0 and layer._v_scale_float == 1.0
         num_tokens, hidden_size = query.shape
-        query = query.view(num_tokens, self.num_heads, self.head_size)
-        key = key.view(num_tokens, self.num_kv_heads, self.head_size)
-        value = value.view(num_tokens, self.num_kv_heads, self.head_size)
+        with xp.Trace("PallasAttentionBackend.forward.view()"):
+            query = query.view(num_tokens, self.num_heads, self.head_size)
 
-        key_cache, value_cache = kv_cache
-        if kv_cache[0].numel() > 0:
-            slot_mapping = attn_metadata.slot_mapping
-            write_to_kv_cache(key, value, key_cache, value_cache, slot_mapping)
+        with xp.Trace("PallasAttentionBackend.forward.write_to_kv_cache()"):
+            if kv_cache.numel() > 0:
+                slot_mapping = attn_metadata.slot_mapping
+                write_to_kv_cache(key, value, kv_cache, slot_mapping)
 
-        output = torch.ops.xla.ragged_paged_attention(
-            query,
-            key_cache,
-            value_cache,
-            attn_metadata.context_lens,
-            attn_metadata.block_tables,
-            attn_metadata.query_start_loc,
-            attn_metadata.num_seqs,
-            num_kv_pages_per_block=NUM_KV_PAGES_PER_BLOCK,
-            num_queries_per_block=NUM_QUERIES_PER_BLOCK,
-            vmem_limit_bytes=self.vmem_limit_bytes,
-            use_kernel=True,
-            sm_scale=self.scale)
+        with xp.Trace("PallasAttentionBackend.forward.ragged_paged_attention()"):
+            output = torch.ops.xla.ragged_paged_attention(
+                query,
+                kv_cache,
+                attn_metadata.context_lens,
+                attn_metadata.block_tables,
+                attn_metadata.query_start_loc,
+                attn_metadata.num_seqs,
+                num_kv_pages_per_block=NUM_KV_PAGES_PER_BLOCK,
+                num_queries_per_block=NUM_QUERIES_PER_BLOCK,
+                vmem_limit_bytes=self.vmem_limit_bytes,
+                use_kernel=True,
+                sm_scale=self.scale)
 
         return output.reshape(num_tokens, hidden_size)
 
@@ -185,24 +187,50 @@ class PallasAttentionBackendImpl(AttentionImpl):
 def write_to_kv_cache(
     key: torch.Tensor,
     value: torch.Tensor,
-    key_cache: torch.Tensor,
-    value_cache: torch.Tensor,
+    kv_cache: torch.Tensor,
     slot_mapping: torch.Tensor,
 ) -> None:
     """ Write the key and values to the KV cache.
 
     Args:
-        key: shape = [num_tokens, num_kv_heads, head_size]
-        value: shape = [num_tokens, num_kv_heads, head_size]
-        k_cache = [num_blocks, block_size, num_kv_heads, head_size]
-        v_cache = [num_blocks, block_size, num_kv_heads, head_size]
+        key: shape = [num_tokens, num_kv_heads * head_size]
+        value: shape = [num_tokens, num_kv_heads *  head_size]
+        kv_cache = [num_blocks, block_size, num_kv_heads * 2, head_size]
 
     """
-    torch.ops.xla.dynamo_set_buffer_donor_(key_cache, True)
-    torch.ops.xla.dynamo_set_buffer_donor_(value_cache, True)
+    _, _, num_combined_kv_heads, head_size = kv_cache.shape
+    num_kv_heads = num_combined_kv_heads // 2
+    print(f"hosseins: write_to_kv_cache() 1 {get_shard_spec(key)=} {value.shape=}")
+    print(f"hosseins: write_to_kv_cache() 1 {get_shard_spec(value)=} {value.shape=}")
 
-    key_cache = key_cache.flatten(0, 1)
-    value_cache = value_cache.flatten(0, 1)
-    slot_mapping = slot_mapping.flatten()
-    key_cache.index_copy_(0, slot_mapping, key)
-    value_cache.index_copy_(0, slot_mapping, value)
+    key = key.view(-1, num_kv_heads, head_size)
+    value = value.view(-1, num_kv_heads, head_size)
+
+    print(f"hosseins: write_to_kv_cache() 2 {get_shard_spec(key)=} {value.shape=}")
+    print(f"hosseins: write_to_kv_cache() 2 {get_shard_spec(value)=} {value.shape=}")
+
+
+    kv = torch.cat([key, value], axis=-1).reshape(-1, num_combined_kv_heads,
+                                                  head_size)
+
+    print(f"hosseins: write_to_kv_cache() 3 {get_shard_spec(kv)=} {kv.shape=}")
+
+    torch.ops.xla.dynamo_set_buffer_donor_(kv_cache, True)
+
+
+    # print(f"hosseins: write_to_kv_cache() {key_cache.shape=}")
+    # print(f"hosseins: write_to_kv_cache() {get_shard_spec(key_cache)=} {key_cache.shape=}")
+    # print(f"hosseins: write_to_kv_cache() {value_cache.shape=}")
+    # print(f"hosseins: write_to_kv_cache() {get_shard_spec(value_cache)=} {value_cache.shape=}")
+    print(f"hosseins: write_to_kv_cache() {slot_mapping.shape=}")
+    print(f"hosseins: write_to_kv_cache() {get_shard_spec(slot_mapping)=}")
+
+
+    kv_cache = kv_cache.flatten(0, 1)
+
+    print(f"hosseins: write_to_kv_cache() 4 {get_shard_spec(kv_cache)=} {kv_cache.shape=}")
+
+    kv_cache.index_copy_(0, slot_mapping, kv)
+
+    print(f"hosseins: write_to_kv_cache() 5 {get_shard_spec(kv_cache)=} {kv_cache.shape=}")
+

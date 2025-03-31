@@ -5,6 +5,7 @@
 # https://github.com/NVIDIA/Megatron-LM/blob/main/megatron/core/tensor_parallel/utils.py
 # Copyright (c) 2022, NVIDIA CORPORATION. All rights reserved.
 import dataclasses
+import datetime
 import pickle
 import time
 from collections import deque
@@ -14,11 +15,24 @@ import torch
 from torch.distributed import ProcessGroup, TCPStore
 from torch.distributed.distributed_c10d import (Backend, PrefixStore,
                                                 _get_default_timeout,
+                                                _unregister_process_group,
                                                 is_nccl_available)
 from torch.distributed.rendezvous import rendezvous
 
 import vllm.envs as envs
 from vllm.logger import init_logger
+import torch_xla.distributed.spmd as xs
+import torch_xla.distributed.spmd.xla_sharding as xla_sharding
+
+from torch_xla.distributed.spmd.debugging import visualize_tensor_sharding
+import torch_xla.core.xla_model as xm
+import torch_xla
+from torch_xla.distributed.spmd import XLAShardedTensor, Mesh
+from typing import Tuple, Union
+
+import re
+import ast
+import os
 
 logger = init_logger(__name__)
 
@@ -205,10 +219,7 @@ class StatelessProcessGroup:
     def barrier(self):
         """A barrier to synchronize all ranks."""
         for i in range(self.world_size):
-            if i == self.rank:
-                self.broadcast_obj(None, src=self.rank)
-            else:
-                self.broadcast_obj(None, src=i)
+            self.broadcast_obj(None, src=i)
 
     @staticmethod
     def create(
@@ -217,6 +228,7 @@ class StatelessProcessGroup:
         rank: int,
         world_size: int,
         data_expiration_seconds: int = 3600,
+        store_timeout: int = 300,
     ) -> "StatelessProcessGroup":
         """A replacement for `torch.distributed.init_process_group` that does not
         pollute the global state.
@@ -238,6 +250,7 @@ class StatelessProcessGroup:
             port=port,
             world_size=world_size,
             is_master=(rank == 0),
+            timeout=datetime.timedelta(seconds=store_timeout),
         )
 
         return StatelessProcessGroup(
@@ -296,13 +309,10 @@ def stateless_init_torch_distributed_process_group(
     # different systems (e.g. RPC) in case the store is multi-tenant.
     prefix_store = PrefixStore(init_method, store)
 
-    pg_options = ProcessGroup.Options(backend=backend, timeout=timeout)
-
     pg: ProcessGroup = ProcessGroup(
         prefix_store,
         group_rank,
         group_size,
-        pg_options,
     )
 
     if backend == "gloo":
@@ -324,9 +334,186 @@ def stateless_init_torch_distributed_process_group(
                                          backend_options)
         backend_type = ProcessGroup.BackendType.NCCL
         device = torch.device("cuda")
+    else:
+        raise RuntimeError(f"Unsupported torch distributed backend: {backend}")
 
+    pg._set_default_backend(backend_type)
     backend_class._set_sequence_number_for_group()
 
     pg._register_backend(device, backend_type, backend_class)
 
     return pg
+
+
+def stateless_destroy_torch_distributed_process_group(
+        pg: ProcessGroup) -> None:
+    """
+    Destroy ProcessGroup returned by
+        stateless_init_torch_distributed_process_group().
+    """
+    # Lazy import for non-CUDA backends.
+    from torch.distributed.distributed_c10d import _shutdown_backend
+    _shutdown_backend(pg)
+    _unregister_process_group(pg.group_name)
+
+def initialize_spmd():
+    global _mesh, _device_ids
+    if not is_spmd(): 
+        return None
+    import torch_xla.core.xla_model as xm
+    import torch_xla.runtime as xr
+    import torch_xla.distributed.spmd as xs
+    from torch_xla.distributed.spmd import Mesh
+    import numpy as np
+
+    xr.use_spmd()
+
+    num_devices = xr.global_runtime_device_count()
+    mesh_shape = (num_devices, )
+    # logger.info(f"hosseins: mesh_shape: [{mesh_shape=}]")
+    _device_ids = np.array(range(num_devices))
+    _mesh = Mesh(_device_ids, mesh_shape, ('axis', ))
+    
+    logger.info(f'Initializing SPMD engine with mesh=[{_mesh}]')
+    return _mesh
+
+
+def get_mesh():
+    if not is_spmd(): 
+        return None
+    global _mesh
+    if _mesh is None:
+        logger.info('hosseins: creating mesh')
+        _mesh = initialize_spmd()
+    else:
+        # logger.info('hosseins: returning mesh')
+        return _mesh
+
+_mesh = None
+_device_ids = list(range(0, 4))
+
+def get_device_ids():
+    return _device_ids
+
+def get_col_parallel_partition_spec():
+    return ('axis', None)
+    return (None, 'axis')
+
+def get_row_parallel_partition_spec():
+    return (None, 'axis')
+    return ('axis', None)
+
+def shard_spmd(data, mesh=None, partition_spec=None, show_visual=False, print_shard=False):
+    if not is_spmd(): 
+        return None
+    assert isinstance(data, torch.Tensor), "Object is not an torch.Tensor"
+    if mesh is None:
+        mesh = _mesh
+
+    xs.mark_sharding(data, mesh, partition_spec)
+    xm.mark_step()
+    # time.sleep(1)
+    # # logger.info(f"hosseins: shard_spmd() -> [{type(data)=}]")
+
+    if show_visual:
+        # logger.info("hosseins: after sharding param")
+        visualize_tensor_sharding(data, use_color=False)
+
+    if print_shard:
+        sharding = torch_xla._XLAC._get_xla_sharding_spec(data)
+        logger.info(f"hosseins: shard_spmd() -> [{sharding=}]")
+
+
+def get_shard_spec(tensor, show_visual=False):
+    # # logger.info(f"hosseins: get_shard_spec() -> [{type(tensor)=}]")
+    if not is_spmd(): 
+        return None
+    
+    # xm.mark_step()
+    sharding = torch_xla._XLAC._get_xla_sharding_spec(tensor)
+    if show_visual:
+        # logger.info("hosseins: after sharding param")
+        visualize_tensor_sharding(tensor, use_color=False)
+        
+    return sharding
+
+from torch.library import impl, custom_op
+
+
+@custom_op("xla::_spmd_full_to_shard_shape", mutates_args=())
+def _spmd_full_to_shard_shape(t: torch.Tensor) -> torch.Tensor:
+    return torch_xla._XLAC._spmd_full_to_shard_shape(t)
+
+@_spmd_full_to_shard_shape.register_fake
+def _(t: torch.Tensor) -> torch.Tensor:
+  return torch.empty_like(t)
+
+
+def enable_man_sharding(t) -> XLAShardedTensor:
+    if not is_spmd(): 
+        return None
+    t = _spmd_full_to_shard_shape(unwrap_sharded_tensor(t))
+    return t
+
+
+def unwrap_sharded_tensor(
+    t: Union[torch.Tensor, XLAShardedTensor]) -> torch.Tensor:
+  if isinstance(t, XLAShardedTensor):
+    return t.global_tensor
+  return t
+
+
+def wrap_as_sharded_tensor(
+    t: Union[torch.Tensor, XLAShardedTensor]) -> XLAShardedTensor:
+  if not isinstance(t, XLAShardedTensor):
+    return XLAShardedTensor(t)
+  return t
+
+# @custom_op("xla::_spmd_full_to_shard_shape", mutates_args=())
+def enable_manual_sharding(t: Union[torch.Tensor, XLAShardedTensor],
+                           partition_spec: Tuple[Union[Tuple, int, str, None]],
+                           mesh: Mesh = None) -> XLAShardedTensor:
+  """
+  This API enables manual sharding for the given tensor. Manual sharding disables SPMD sharding proporgation and auto
+  partition for the given tensor and all subsequential tensors that produced by an op that uses the given tensor as
+  input, and therefore allows the user to manually call collectives for the tensor and subsequential tensors. It
+  requires the user to provide the partition spec to shard the tensor before enabling the manual sharding. To be noted,
+  the leaf tensors need to pass to disable_manual_sharding before ending the graph.
+  """
+  mesh = get_global_mesh() if mesh is None else mesh
+  t = xs.mark_sharding(unwrap_sharded_tensor(t), mesh, partition_spec)
+  t = torch_xla._XLAC._spmd_full_to_shard_shape(unwrap_sharded_tensor(t))
+  return wrap_as_sharded_tensor(t)
+
+def get_partition_spec(t):
+    if not is_spmd(): 
+        return None
+    
+    shard_spec = get_shard_spec(t)
+    # logger.info(f"hosseins: get_partition_spec() -> [{shard_spec=}]")
+    match = re.search(r"\[([^\]]+)\]", shard_spec)
+    # # logger.info(f"hosseins: get_partition_spec() -> [{match=}]")
+
+    if not match:
+        return None
+
+    shard_map = match.group(1)
+    # # logger.info(f"hosseins: get_partition_spec() -> [{shard_map=}]")
+
+    shard_map_list = ast.literal_eval(f"[{shard_map}]")
+    # # logger.info(f"hosseins: get_partition_spec() -> [{shard_map_list=}]")
+    return_val = ()
+
+    if len(shard_map_list) == 0:
+        return_val = ()
+    
+    return_val = tuple([None if x == 1 else 'axis' for x in shard_map_list])
+    # # logger.info(f"hosseins: get_partition_spec() -> [{return_val=}]")
+
+    return return_val
+
+def is_spmd():
+    if "USE_SPMD" in os.environ and os.environ['USE_SPMD'] == "1":
+        return True
+    else:
+        return False

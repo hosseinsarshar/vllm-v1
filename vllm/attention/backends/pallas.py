@@ -11,6 +11,9 @@ from vllm.attention.backends.abstract import (AttentionBackend, AttentionImpl,
                                               AttentionMetadata, AttentionType,
                                               is_quantized_kv_cache)
 from vllm.attention.backends.utils import CommonAttentionState
+from vllm.distributed.utils import get_shard_spec, get_partition_spec, get_mesh, get_device_ids, is_spmd
+import torch_xla
+import torch_xla.distributed.spmd as xs
 
 
 class PallasAttentionBackend(AttentionBackend):
@@ -48,7 +51,8 @@ class PallasAttentionBackend(AttentionBackend):
     ) -> None:
         raise RuntimeError("swap_blocks is not used for the TPU backend.")
 
-    @torch.compile(backend="openxla")
+    # hosseins: torch.compile
+    # @torch.compile(backend="openxla")
     @staticmethod
     def copy_blocks(
         kv_caches: List[Tuple[torch.Tensor, torch.Tensor]],
@@ -174,6 +178,17 @@ class PallasAttentionBackendImpl(AttentionImpl):
         Returns:
             shape = [batch_size, seq_len, num_heads * head_size]
         """
+        key_cache, value_cache = kv_cache
+        print(f"hosseins: PallasAttentionBackendImpl -> forward() 1 [{query.shape=}]")
+        print(f"hosseins: PallasAttentionBackendImpl -> forward() 1 [{get_shard_spec(query)=}]")
+        print(f"hosseins: PallasAttentionBackendImpl -> forward() 1 [{key.shape=}]")
+        print(f"hosseins: PallasAttentionBackendImpl -> forward() 1 [{get_shard_spec(key)=}]")
+        print(f"hosseins: PallasAttentionBackendImpl -> forward() 1 [{value.shape=}]")
+        print(f"hosseins: PallasAttentionBackendImpl -> forward() 1 [{get_shard_spec(value)=}]")
+        print(f"hosseins: PallasAttentionBackendImpl -> forward() 1 [{key_cache.shape=}]")
+        print(f"hosseins: PallasAttentionBackendImpl -> forward() 1 [{get_shard_spec(key_cache)=}]")
+        print(f"hosseins: PallasAttentionBackendImpl -> forward() 1 [{value_cache.shape=}]")
+        print(f"hosseins: PallasAttentionBackendImpl -> forward() 1 [{get_shard_spec(value_cache)=}]")
         assert layer._k_scale_float == 1.0 and layer._v_scale_float == 1.0
         batch_size, seq_len, hidden_size = query.shape
         query = query.view(batch_size, seq_len, self.num_heads, self.head_size)
@@ -181,9 +196,21 @@ class PallasAttentionBackendImpl(AttentionImpl):
         value = value.view(batch_size, seq_len, self.num_kv_heads,
                            self.head_size)
 
+        print(f"hosseins: PallasAttentionBackendImpl -> forward() 2 [{query.shape=}]")
+        print(f"hosseins: PallasAttentionBackendImpl -> forward() 2 [{key.shape=}]")
+        print(f"hosseins: PallasAttentionBackendImpl -> forward() 2 [{value.shape=}]")
+        
+        print(f"hosseins: PallasAttentionBackendImpl -> forward() 2 [{get_shard_spec(query)=}]")
+        print(f"hosseins: PallasAttentionBackendImpl -> forward() 2 [{get_shard_spec(key)=}]")
+        print(f"hosseins: PallasAttentionBackendImpl -> forward() 2 [{get_shard_spec(value)=}]")
+
+        print(f"hosseins: PallasAttentionBackendImpl -> forward() 3 [{query.shape=}]")
+        print(f"hosseins: PallasAttentionBackendImpl -> forward() 3 [{key.shape=}]")
+        print(f"hosseins: PallasAttentionBackendImpl -> forward() 3 [{value.shape=}]")
+        print(f"hosseins: PallasAttentionBackendImpl -> forward() 1 [{get_device_ids()=}]")
+
         if kv_cache[0].numel() > 0:
             slot_mapping = attn_metadata.slot_mapping
-            key_cache, value_cache = kv_cache
             write_to_kv_cache(key, value, key_cache, value_cache, slot_mapping)
 
         query = query * self.scale
@@ -300,13 +327,35 @@ def write_to_kv_cache(
 ) -> None:
     torch.ops.xla.dynamo_set_buffer_donor_(key_cache, True)
     torch.ops.xla.dynamo_set_buffer_donor_(value_cache, True)
-
-    key = key.flatten(0, 2)
+    print(f"hosseins: write_to_kv_cache() 1 [{get_shard_spec(key)=}]")
+    print(f"hosseins: write_to_kv_cache() 1 [{key.shape=}]")
+    key = key.flatten(0, 2) # why we need flatten in first place - whether the flattening axis is sharded
+    print(f"hosseins: write_to_kv_cache() 2 [{get_shard_spec(key)=}]")
+    print(f"hosseins: write_to_kv_cache() 2 [{key.shape=}]")
+    print(f"hosseins: write_to_kv_cache() 1 [{get_shard_spec(value)=}]")
+    print(f"hosseins: write_to_kv_cache() 1 [{value.shape=}]")
     value = value.flatten(0, 2)
-    key_cache = key_cache.flatten(0, 2)
+    print(f"hosseins: write_to_kv_cache() 2 [{get_shard_spec(value)=}]")
+    print(f"hosseins: write_to_kv_cache() 2 [{value.shape=}]")
+    print(f"hosseins: write_to_kv_cache() 1 [{get_shard_spec(key_cache)=}]")
+    print(f"hosseins: write_to_kv_cache() 1 [{key_cache.shape=}]")
+    key_cache = key_cache.flatten(0, 2) # hosseins: sharding should align with key_cache
+    print(f"hosseins: write_to_kv_cache() 2 [{get_shard_spec(key_cache)=}]")
+    print(f"hosseins: write_to_kv_cache() 2 [{key_cache.shape=}]")
+    print(f"hosseins: write_to_kv_cache() 1 [{get_shard_spec(value_cache)=}]")
+    print(f"hosseins: write_to_kv_cache() 1 [{value_cache.shape=}]")
     value_cache = value_cache.flatten(0, 2)
+    print(f"hosseins: write_to_kv_cache() 2 [{get_shard_spec(value_cache)=}]")
+    print(f"hosseins: write_to_kv_cache() 2 [{value_cache.shape=}]")
+    print(f"hosseins: write_to_kv_cache() [{slot_mapping.shape=}]")
     key_cache.index_copy_(0, slot_mapping, key)
     value_cache.index_copy_(0, slot_mapping, value)
+
+    print(f"hosseins: write_to_kv_cache() 3 [{key.device=}]")
+    print(f"hosseins: write_to_kv_cache() 3 [{value.device=}]")
+    print(f"hosseins: write_to_kv_cache() 3 [{key_cache.device=}]")
+    print(f"hosseins: write_to_kv_cache() 3 [{value_cache.device=}]")
+    print(f"hosseins: write_to_kv_cache() 3 [{slot_mapping.device=}]")
 
 
 def paged_attention(

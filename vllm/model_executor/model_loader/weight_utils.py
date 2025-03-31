@@ -27,6 +27,7 @@ from vllm.model_executor.layers.quantization import (QuantizationConfig,
                                                      get_quantization_config)
 from vllm.platforms import current_platform
 from vllm.utils import PlaceholderModule
+from vllm.distributed.utils import shard_spmd, get_col_parallel_partition_spec, get_mesh
 
 try:
     from runai_model_streamer import SafetensorsStreamer
@@ -37,6 +38,14 @@ except (ImportError, OSError):
         "runai_model_streamer")  # type: ignore[assignment]
     SafetensorsStreamer = runai_model_streamer.placeholder_attr(
         "SafetensorsStreamer")
+
+try:
+    from fastsafetensors import SafeTensorsFileLoader, SingleGroup
+except ImportError:
+    fastsafetensors = PlaceholderModule("fastsafetensors")
+    SafeTensorsFileLoader = fastsafetensors.placeholder_attr(
+        "SafeTensorsFileLoader")
+    SingleGroup = fastsafetensors.placeholder_attr("SingleGroup")
 
 logger = init_logger(__name__)
 
@@ -452,6 +461,45 @@ def runai_safetensors_weights_iterator(
             yield from streamer.get_tensors()
 
 
+def fastsafetensors_weights_iterator(
+    hf_weights_files: List[str],
+    use_tqdm_on_load: bool,
+) -> Generator[Tuple[str, torch.Tensor], None, None]:
+    """Iterate over the weights in the model safetensor files 
+    using fastsafetensor library."""
+    if torch.distributed.is_initialized():
+        pg = torch.distributed.group.WORLD
+    else:
+        pg = SingleGroup()
+
+    device = torch.device(f'cuda:{pg.rank()}')
+    weight_files_sub_lists = [
+        hf_weights_files[i:i + pg.size()]
+        for i in range(0, len(hf_weights_files), pg.size())
+    ]
+
+    for f_list in tqdm(
+            weight_files_sub_lists,
+            desc="Loading safetensors using Fastsafetensor loader",
+            disable=not enable_tqdm(use_tqdm_on_load),
+            bar_format=_BAR_FORMAT,
+    ):
+        loader = SafeTensorsFileLoader(pg, device)
+        rank_file_map = {i: [f] for i, f in enumerate(f_list)}
+        loader.add_filenames(rank_file_map)
+        try:
+            fb = loader.copy_files_to_device()
+            try:
+                keys = list(fb.key_to_rank_lidx.keys())
+                for k in keys:
+                    t = fb.get_tensor(k)
+                    yield k, t
+            finally:
+                fb.close()
+        finally:
+            loader.close()
+
+
 def pt_weights_iterator(
     hf_weights_files: List[str],
     use_tqdm_on_load: bool,
@@ -555,7 +603,12 @@ def row_parallel_weight_loader(param: torch.Tensor,
         start_idx = tp_rank * shard_size
         loaded_weight = loaded_weight.narrow(shard_dim, start_idx, shard_size)
 
-    return default_weight_loader(param, loaded_weight)
+    ret_o = default_weight_loader(param, loaded_weight)
+
+    mesh = get_mesh()
+    shard_spmd(param.data, mesh, get_col_parallel_partition_spec())
+
+    return ret_o
 
 
 LoaderFunction = Callable[[torch.Tensor, torch.Tensor], torch.Tensor]

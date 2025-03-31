@@ -2,7 +2,8 @@
 /vllm/_version.py
 
 # vllm-flash-attn built from source
-vllm/vllm_flash_attn/
+vllm/vllm_flash_attn/*
+!vllm/vllm_flash_attn/fa_utils.py
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -11,7 +12,7 @@ __pycache__/
 
 # C extensions
 *.so
-
+script.sh
 # Distribution / packaging
 .Python
 build/
@@ -34,6 +35,7 @@ share/python-wheels/
 *.egg
 MANIFEST
 /.deps/
+torch_compile_debug/
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
@@ -65,7 +67,6 @@ cover/
 *.pot
 
 # Django stuff:
-*.log
 local_settings.py
 db.sqlite3
 db.sqlite3-journal
