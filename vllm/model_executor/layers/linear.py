@@ -197,8 +197,8 @@ class UnquantizedLinearMethod(LinearMethodBase):
               bias: Optional[torch.Tensor] = None) -> torch.Tensor:
         print(f"hosseins: UnquantizedLinearMethod -> apply() {layer.weight.shape=} {get_shard_spec(layer.weight)=}")
         print(f"hosseins: UnquantizedLinearMethod -> apply() {x.shape=} {get_shard_spec(x)=}")
-        # with xp.Trace("UnquantizedLinearMethod.apply.linear()"):
-        out = F.linear(x, layer.weight, bias)
+        with xp.Trace("UnquantizedLinearMethod.apply.linear()"):
+            out = F.linear(x, layer.weight, bias)
         # mark sharding (as it's lazy - this is the hint not the actual execution of the graph) or xm.mark_step() for debug
         print(f"hosseins: UnquantizedLinearMethod -> apply() {out.shape=} {get_shard_spec(out)=}")
 
@@ -490,13 +490,13 @@ class ColumnParallelLinear(LinearBase):
 
         # Matrix multiply.
         assert self.quant_method is not None
-        # with xp.Trace("ColumnParallelLinear.forward.quant_method.apply()"):
-        output_parallel = self.quant_method.apply(self, input_, bias)
-        if self.gather_output:
-            # All-gather across the partitions.
-            output = tensor_model_parallel_all_gather(output_parallel)
-        else:
-            output = output_parallel
+        with xp.Trace("ColumnParallelLinear.forward.quant_method.apply()"):
+            output_parallel = self.quant_method.apply(self, input_, bias)
+            if self.gather_output:
+                # All-gather across the partitions.
+                output = tensor_model_parallel_all_gather(output_parallel)
+            else:
+                output = output_parallel
 
         print(f"hosseins: ColumnParallelLinear -> forward() {get_shard_spec(output)=}")
         output_bias = self.bias if self.skip_bias_add else None
@@ -1326,28 +1326,28 @@ class RowParallelLinear(LinearBase):
         self, input_
     ) -> Union[torch.Tensor, tuple[torch.Tensor, Optional[Parameter]]]:
         print(f"hosseins: RowParallelLinear -> forward() {type(self)=}")
-        # with xp.Trace("RowParallelLinear.forward.part_1()"):
-        if self.input_is_parallel:
-            input_parallel = input_
-        else:
-            tp_rank = get_tensor_model_parallel_rank()
-            splitted_input = split_tensor_along_last_dim(
-                input_, num_partitions=self.tp_size)
-            input_parallel = splitted_input[tp_rank].contiguous()
+        with xp.Trace("RowParallelLinear.forward.part_1()"):
+            if self.input_is_parallel:
+                input_parallel = input_
+            else:
+                tp_rank = get_tensor_model_parallel_rank()
+                splitted_input = split_tensor_along_last_dim(
+                    input_, num_partitions=self.tp_size)
+                input_parallel = splitted_input[tp_rank].contiguous()
 
         # Matrix multiply.
         assert self.quant_method is not None
         # Only fuse bias add into GEMM for rank 0 (this ensures that
         # bias will not get added more than once in TP>1 case)
         bias_ = None if (self.tp_rank > 0 or self.skip_bias_add) else self.bias
-        # with xp.Trace("RowParallelLinear.apply()"):
-        output_parallel = self.quant_method.apply(self,
-                                                input_parallel,
-                                                bias=bias_)
-        if self.reduce_results and self.tp_size > 1:
-            output = tensor_model_parallel_all_reduce(output_parallel)
-        else:
-            output = output_parallel
+        with xp.Trace("RowParallelLinear.apply()"):
+            output_parallel = self.quant_method.apply(self,
+                                                    input_parallel,
+                                                    bias=bias_)
+            if self.reduce_results and self.tp_size > 1:
+                output = tensor_model_parallel_all_reduce(output_parallel)
+            else:
+                output = output_parallel
 
         output_bias = self.bias if self.skip_bias_add else None
 

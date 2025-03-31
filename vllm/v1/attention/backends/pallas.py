@@ -159,27 +159,27 @@ class PallasAttentionBackendImpl(AttentionImpl):
 
         assert layer._k_scale_float == 1.0 and layer._v_scale_float == 1.0
         num_tokens, hidden_size = query.shape
-        # with xp.Trace("PallasAttentionBackend.forward.view()"):
-        query = query.view(num_tokens, self.num_heads, self.head_size)
+        with xp.Trace("PallasAttentionBackend.forward.view()"):
+            query = query.view(num_tokens, self.num_heads, self.head_size)
 
-        # with xp.Trace("PallasAttentionBackend.forward.write_to_kv_cache()"):
-        if kv_cache.numel() > 0:
-            slot_mapping = attn_metadata.slot_mapping
-            write_to_kv_cache(key, value, kv_cache, slot_mapping)
+        with xp.Trace("PallasAttentionBackend.forward.write_to_kv_cache()"):
+            if kv_cache.numel() > 0:
+                slot_mapping = attn_metadata.slot_mapping
+                write_to_kv_cache(key, value, kv_cache, slot_mapping)
 
-        # with xp.Trace("PallasAttentionBackend.forward.ragged_paged_attention()"):
-        output = torch.ops.xla.ragged_paged_attention(
-            query,
-            kv_cache,
-            attn_metadata.context_lens,
-            attn_metadata.block_tables,
-            attn_metadata.query_start_loc,
-            attn_metadata.num_seqs,
-            num_kv_pages_per_block=NUM_KV_PAGES_PER_BLOCK,
-            num_queries_per_block=NUM_QUERIES_PER_BLOCK,
-            vmem_limit_bytes=self.vmem_limit_bytes,
-            use_kernel=True,
-            sm_scale=self.scale)
+        with xp.Trace("PallasAttentionBackend.forward.ragged_paged_attention()"):
+            output = torch.ops.xla.ragged_paged_attention(
+                query,
+                kv_cache,
+                attn_metadata.context_lens,
+                attn_metadata.block_tables,
+                attn_metadata.query_start_loc,
+                attn_metadata.num_seqs,
+                num_kv_pages_per_block=NUM_KV_PAGES_PER_BLOCK,
+                num_queries_per_block=NUM_QUERIES_PER_BLOCK,
+                vmem_limit_bytes=self.vmem_limit_bytes,
+                use_kernel=True,
+                sm_scale=self.scale)
 
         return output.reshape(num_tokens, hidden_size)
 
@@ -200,20 +200,24 @@ def write_to_kv_cache(
     """
     _, _, num_combined_kv_heads, head_size = kv_cache.shape
     num_kv_heads = num_combined_kv_heads // 2
+    print(f"hosseins: write_to_kv_cache() 1 {get_shard_spec(key)=} {value.shape=}")
+    print(f"hosseins: write_to_kv_cache() 1 {get_shard_spec(value)=} {value.shape=}")
 
     key = key.view(-1, num_kv_heads, head_size)
     value = value.view(-1, num_kv_heads, head_size)
 
+    print(f"hosseins: write_to_kv_cache() 2 {get_shard_spec(key)=} {value.shape=}")
+    print(f"hosseins: write_to_kv_cache() 2 {get_shard_spec(value)=} {value.shape=}")
+
+
     kv = torch.cat([key, value], axis=-1).reshape(-1, num_combined_kv_heads,
                                                   head_size)
+
+    print(f"hosseins: write_to_kv_cache() 3 {get_shard_spec(kv)=} {kv.shape=}")
 
     torch.ops.xla.dynamo_set_buffer_donor_(kv_cache, True)
 
 
-    print(f"hosseins: write_to_kv_cache() {key.shape=}")
-    print(f"hosseins: write_to_kv_cache() {get_shard_spec(key)=} {value.shape=}")
-    print(f"hosseins: write_to_kv_cache() {value.shape=}")
-    print(f"hosseins: write_to_kv_cache() {get_shard_spec(value)=} {value.shape=}")
     # print(f"hosseins: write_to_kv_cache() {key_cache.shape=}")
     # print(f"hosseins: write_to_kv_cache() {get_shard_spec(key_cache)=} {key_cache.shape=}")
     # print(f"hosseins: write_to_kv_cache() {value_cache.shape=}")
@@ -223,4 +227,10 @@ def write_to_kv_cache(
 
 
     kv_cache = kv_cache.flatten(0, 1)
+
+    print(f"hosseins: write_to_kv_cache() 4 {get_shard_spec(kv_cache)=} {kv_cache.shape=}")
+
     kv_cache.index_copy_(0, slot_mapping, kv)
+
+    print(f"hosseins: write_to_kv_cache() 5 {get_shard_spec(kv_cache)=} {kv_cache.shape=}")
+

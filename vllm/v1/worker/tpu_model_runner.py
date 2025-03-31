@@ -864,12 +864,12 @@ class TPUModelRunner:
         kv_caches: dict[str, torch.Tensor] = {}
         print(f"hosseins: initialize_kv_cache() {kv_cache_config=}")
 
-        print(f"hosseins: {len(kv_cache_config.kv_cache_spec)=}")
+        # print(f"hosseins: {len(kv_cache_config.kv_cache_spec)=}")
         print(f"hosseins: {kv_cache_config.num_blocks=}")
         print(f"hosseins: {len(kv_cache_config.tensors)=}")
-        print(f"hosseins: {len(kv_cache_config.groups)=}")
+        # print(f"hosseins: {len(kv_cache_config.groups)=}")
 
-        print(f"hosseins: {len(kv_cache_config.kv_cache_spec.items())=}")
+        # print(f"hosseins: {len(kv_cache_config.kv_cache_spec.items())=}")
 
         for kv_cache_group in kv_cache_config.kv_cache_groups:
             kv_cache_spec = kv_cache_group.kv_cache_spec
@@ -887,7 +887,7 @@ class TPUModelRunner:
                     tpu_kv_cache = torch.zeros(kv_cache_shape,
                                                dtype=dtype,
                                                device=self.device)
-
+                    shard_spmd(data=tpu_kv_cache, mesh=self.mesh, partition_spec=(None, None, 'axis', None))
                     kv_caches[layer_name] = tpu_kv_cache
                 else:
                     raise NotImplementedError

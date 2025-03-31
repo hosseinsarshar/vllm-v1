@@ -2537,6 +2537,6 @@ def sha256(input) -> int:
 def get_tpu_info(device = None):
     tpu_info = metrics.get_chip_usage(tpu_info_device.get_local_chips()[0])
     util = {f"bytes_limit": tpu.total_memory for tpu in (tpu_info if device is None else [tpu_info[device]])}
-    memory = {f"peak_bytes_used": tpu.memory_usage for tpu in (tpu_info if device is None else [tpu_info[device]])}
+    memory = {f"bytes_used": tpu.memory_usage for tpu in (tpu_info if device is None else [tpu_info[device]])}
     return util | memory
     # return {f"TPU Utilization (%) / Device 0": 0} | {f"TPU Memory (%) / Device 0": 0}
