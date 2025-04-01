@@ -140,6 +140,7 @@ class TPUWorker:
     def determine_available_memory(self) -> int:
         kv_caches: dict[str, torch.Tensor] = {}
         kv_cache_spec = self.model_runner.get_kv_cache_spec()
+        print(f"hosseins: [{kv_cache_spec=}]")
         for layer_name, layer_spec in kv_cache_spec.items():
             if isinstance(layer_spec, FullAttentionSpec):
                 dtype = layer_spec.dtype
@@ -149,6 +150,7 @@ class TPUWorker:
                 tpu_kv_cache = torch.tensor([],
                                             dtype=dtype,
                                             device=self.device)
+                
                 kv_caches[layer_name] = tpu_kv_cache
             else:
                 raise NotImplementedError
