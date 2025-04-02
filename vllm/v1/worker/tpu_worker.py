@@ -78,16 +78,22 @@ class TPUWorker:
         self.profiler = None
         self.profile_dir = None
         print(f"hosseins: {envs.VLLM_TORCH_PROFILER_DIR=}")
+        # if envs.VLLM_TORCH_PROFILER_DIR and self.rank < 1:
+        #     # For TPU, we can only have 1 active profiler session for 1 profiler
+        #     # server. So we only profile on rank0.
+        #     self.profile_dir = envs.VLLM_TORCH_PROFILER_DIR
+        #     logger.info("Profiling enabled. Traces will be saved to: %s",
+        #                 self.profile_dir)
+        #     self.profiler = xp.start_server(9012)
+        #     print(f"hosseins: starting the profile at [{envs.VLLM_TORCH_PROFILER_DIR}]")
+        #     duration_ms = 800000
+        #     xp.trace_detached(f'localhost:{9012}', envs.VLLM_TORCH_PROFILER_DIR, duration_ms=duration_ms)
         if envs.VLLM_TORCH_PROFILER_DIR and self.rank < 1:
             # For TPU, we can only have 1 active profiler session for 1 profiler
             # server. So we only profile on rank0.
             self.profile_dir = envs.VLLM_TORCH_PROFILER_DIR
             logger.info("Profiling enabled. Traces will be saved to: %s",
                         self.profile_dir)
-            self.profiler = xp.start_server(9012)
-            print(f"hosseins: starting the profile at [{envs.VLLM_TORCH_PROFILER_DIR}]")
-            duration_ms = 800000
-            xp.trace_detached(f'localhost:{9012}', envs.VLLM_TORCH_PROFILER_DIR, duration_ms=duration_ms)
 
         if self.model_config.seed is None:
             self.model_config.seed = 0

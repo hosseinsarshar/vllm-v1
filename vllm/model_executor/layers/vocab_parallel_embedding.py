@@ -363,6 +363,7 @@ class VocabParallelEmbedding(torch.nn.Module):
         if getattr(param, "is_gguf_weight_type", None):
             param.data.copy_(loaded_weight)
             param.weight_type = loaded_weight.item()
+            shard_spmd(data=param.data, mesh=self.mesh, partition_spec=get_col_parallel_partition_spec())
             return
         elif isinstance(param, UninitializedParameter):
             shape = list(loaded_weight.shape)
@@ -375,6 +376,8 @@ class VocabParallelEmbedding(torch.nn.Module):
         if output_dim is None:
             assert param.data.shape == loaded_weight.shape
             param.data.copy_(loaded_weight)
+            shard_spmd(data=param.data, mesh=self.mesh, partition_spec=get_col_parallel_partition_spec())
+
             return
 
         # Shard indexes for loading the weight
@@ -412,7 +415,7 @@ class VocabParallelEmbedding(torch.nn.Module):
             param[:loaded_weight.shape[0]].data.copy_(loaded_weight)
             param[loaded_weight.shape[0]:].data.fill_(0)
 
-        # shard_spmd(data=param.data, mesh=self.mesh, partition_spec=get_col_parallel_partition_spec())
+        shard_spmd(data=param.data, mesh=self.mesh, partition_spec=get_col_parallel_partition_spec())
 
     def forward(self, input_):
         # print("hosseins: VocabParallelEmbedding.forward()")

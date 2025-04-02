@@ -113,12 +113,17 @@ class TPUWorker(LoRANotSupportedWorkerBase, LocalOrDistributedWorkerBase):
         if envs.VLLM_TORCH_PROFILER_DIR and self.rank < 1:
             # For TPU, we can only have 1 active profiler session for 1 profiler
             # server. So we only profile on rank0.
+            # self.profile_dir = envs.VLLM_TORCH_PROFILER_DIR
+            # logger.info("Profiling enabled. Traces will be saved to: %s",
+            #             self.profile_dir)
+            # self.profiler = xp.start_server(9012)
+            # duration_ms = 800000
+            # xp.trace_detached(f'localhost:{9012}', self.profile_dir, duration_ms=duration_ms)
             self.profile_dir = envs.VLLM_TORCH_PROFILER_DIR
             logger.info("Profiling enabled. Traces will be saved to: %s",
                         self.profile_dir)
             self.profiler = xp.start_server(9012)
-            duration_ms = 800000
-            xp.trace_detached(f'localhost:{9012}', self.profile_dir, duration_ms=duration_ms)
+
 
     def start_profile(self):
         if self.rank < 1:

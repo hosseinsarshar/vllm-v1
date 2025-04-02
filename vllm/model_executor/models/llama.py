@@ -401,10 +401,10 @@ class LlamaModel(nn.Module):
         # print(f"hosseins: LlamaModel.forward() 1 {get_shard_spec(hidden_states)=}")
         # print("hosseins: LlamaModel.forward() layer start")
         for layer in self.layers[self.start_layer:self.end_layer]:
-            self.get_layer_status(layer)
+            # self.get_layer_status(layer)
             # with xp.Trace(f"LlamaModel.forward.layer() [{counter}]"):
             hidden_states, residual = layer(positions, hidden_states, residual)
-            counter += 1
+            # counter += 1
 
         # print("hosseins: LlamaModel.forward() layer end")
 
