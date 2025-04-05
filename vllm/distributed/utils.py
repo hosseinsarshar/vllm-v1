@@ -485,6 +485,23 @@ def enable_manual_sharding(t: Union[torch.Tensor, XLAShardedTensor],
   t = torch_xla._XLAC._spmd_full_to_shard_shape(unwrap_sharded_tensor(t))
   return wrap_as_sharded_tensor(t)
 
+
+def enable_manual_sharding_wrapper(tensor,
+                           partition_spec):
+  if not is_spmd(): 
+        return tensor
+  
+  return xs.enable_manual_sharding(tensor, partition_spec, mesh=get_mesh()).global_tensor
+
+
+def disable_manual_sharding_wrapper(tensor, partition_spec, full_shape):
+  if not is_spmd(): 
+        return tensor
+  
+  return xs.disable_manual_sharding(tensor, partition_spec, 
+                                    full_shape, mesh=get_mesh()).global_tensor
+
+
 def get_partition_spec(t):
     if not is_spmd(): 
         return None

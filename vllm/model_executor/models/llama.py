@@ -226,8 +226,8 @@ class LlamaAttention(nn.Module):
             q, k, v = qkv.split([self.q_size, self.kv_size, self.kv_size], dim=-1)
         with xp.Trace("LlamaAttention.forward.rotary_emb()"):
             q, k = self.rotary_emb(positions, q, k)
-        with xp.Trace("LlamaAttention.forward.attn()"):
-            attn_output = self.attn(q, k, v)
+        # with xp.Trace("LlamaAttention.forward.attn()"):
+        attn_output = self.attn(q, k, v)
         print(f"hosseins: LlamaAttention.forward() {attn_output.shape=}")
         print(f"hosseins: LlamaAttention.forward() {attn_output.device=}")
         with xp.Trace("LlamaAttention.forward.o_proj()"):
@@ -309,9 +309,9 @@ class LlamaDecoderLayer(nn.Module):
                 hidden_states, residual = self.input_layernorm(
                     hidden_states, residual)
         
-        with xp.Trace("LlamaDecoderLayer.forward.self_attn()"):
-            hidden_states = self.self_attn(positions=positions,
-                                        hidden_states=hidden_states)
+        # with xp.Trace("LlamaDecoderLayer.forward.self_attn()"):
+        hidden_states = self.self_attn(positions=positions,
+                                    hidden_states=hidden_states)
 
         print(f"hosseins: LlamaDecoderLayer.forward() {hidden_states.shape=}")
         print(f"hosseins: LlamaDecoderLayer.forward() {get_shard_spec(hidden_states)=}")
@@ -379,7 +379,8 @@ class LlamaModel(nn.Module):
                 ["hidden_states", "residual"], config.hidden_size))
 
     def get_input_embeddings(self, input_ids: torch.Tensor) -> torch.Tensor:
-        return self.embed_tokens(input_ids)
+        with xp.Trace("LlamaModel.get_input_embeddings()"):
+            return self.embed_tokens(input_ids)
 
     @staticmethod
     def get_layer_status(layer):
@@ -398,7 +399,7 @@ class LlamaModel(nn.Module):
         print("hosseins: LlamaModel.forward()")
         print(f"hosseins: LlamaModel.forward() {get_pp_group().is_first_rank=}")
         
-        # with xp.Trace("LlamaModel.forward.get_input_embeddings()"):
+        # with xp.Trace("LlamaModel.forward()"):
         if get_pp_group().is_first_rank:
             if inputs_embeds is not None:
                 hidden_states = inputs_embeds
@@ -597,7 +598,8 @@ class LlamaForCausalLM(nn.Module, SupportsLoRA, SupportsPP):
         return LlamaModel(vllm_config=vllm_config, prefix=prefix)
 
     def get_input_embeddings(self, input_ids: torch.Tensor) -> torch.Tensor:
-        return self.model.get_input_embeddings(input_ids)
+        with xp.Trace("LlamaForCausalLM.get_input_embeddings()"):
+            return self.model.get_input_embeddings(input_ids)
 
     def forward(
         self,
@@ -607,7 +609,7 @@ class LlamaForCausalLM(nn.Module, SupportsLoRA, SupportsPP):
         inputs_embeds: Optional[torch.Tensor] = None,
     ) -> Union[torch.Tensor, IntermediateTensors]:
         print("hosseins: LlamaForCasualLM.forward()")
-        # with xp.Trace("LlamaForCasualLM.forward.model()"):
+        # with xp.Trace("LlamaForCasualLM.forward()"):
         model_output = self.model(input_ids, positions, intermediate_tensors,
                                     inputs_embeds)
         return model_output
@@ -617,14 +619,16 @@ class LlamaForCausalLM(nn.Module, SupportsLoRA, SupportsPP):
         hidden_states: torch.Tensor,
         sampling_metadata: SamplingMetadata,
     ) -> Optional[torch.Tensor]:
-        logits = self.logits_processor(self.lm_head, hidden_states,
-                                       sampling_metadata)
-        return logits
+        with xp.Trace("LlamaForCasualLM.compute_logits()"):
+            logits = self.logits_processor(self.lm_head, hidden_states,
+                                        sampling_metadata)
+            return logits
 
     def sample(self, logits: torch.Tensor,
                sampling_metadata: SamplingMetadata) -> Optional[SamplerOutput]:
-        next_tokens = self.sampler(logits, sampling_metadata)
-        return next_tokens
+        with xp.Trace("LlamaForCasualLM.sample()"):
+            next_tokens = self.sampler(logits, sampling_metadata)
+            return next_tokens
 
     def load_weights(self, weights: Iterable[Tuple[str,
                                                    torch.Tensor]]) -> Set[str]:

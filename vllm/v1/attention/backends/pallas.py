@@ -10,13 +10,15 @@ import torch_xla.experimental.custom_kernel  # noqa: F401
 from vllm.attention.backends.abstract import (AttentionBackend, AttentionImpl,
                                               AttentionLayer, AttentionType)
 from vllm.attention.backends.utils import CommonAttentionState
+import torch_xla.core.xla_model as xm
+import torch.nn.functional as F
 
 # These are the 2 tunable parameters of the paged attention Pallas kernel.
 NUM_QUERIES_PER_BLOCK = 32
 NUM_KV_PAGES_PER_BLOCK = 128
-from vllm.distributed.utils import get_shard_spec
+from vllm.distributed.utils import get_shard_spec, is_spmd, disable_manual_sharding_wrapper, enable_manual_sharding_wrapper, get_device_ids
 import torch_xla.debug.profiler as xp
-
+import torch_xla.distributed.spmd as xs
 
 class PallasAttentionBackend(AttentionBackend):
 
@@ -131,10 +133,10 @@ class PallasAttentionBackendImpl(AttentionImpl):
     def forward(
         self,
         layer: AttentionLayer,
-        query: torch.Tensor,
-        key: torch.Tensor,
-        value: torch.Tensor,
-        kv_cache: torch.Tensor,
+        query_org: torch.Tensor,
+        key_org: torch.Tensor,
+        value_org: torch.Tensor,
+        kv_cache_org: torch.Tensor,
         attn_metadata: PallasMetadata,
         output: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
@@ -152,15 +154,39 @@ class PallasAttentionBackendImpl(AttentionImpl):
             shape = [num_tokens, num_heads * head_size]
         """
         # For determine_available_memory case.
-        if kv_cache.numel() == 0:
+        print(f"hosseins: PallasAttentionBackend.forward() 0 {get_shard_spec(query_org)=} {query_org.shape=}")
+        print(f"hosseins: PallasAttentionBackend.forward() 0 {get_shard_spec(key_org)=} {key_org.shape=}")
+        print(f"hosseins: PallasAttentionBackend.forward() 0 {get_shard_spec(value_org)=} {value_org.shape=}")
+
+        if kv_cache_org.numel() == 0:
             if output is None:
-                output = torch.ones_like(query)
+                output = torch.ones_like(query_org)
             return output
+        print(f"hosseins: PallasAttentionBackend.forward() 0 {get_shard_spec(kv_cache_org)=} {kv_cache_org.shape=}")
+
+        key = enable_manual_sharding_wrapper(key_org, (None, 'axis'))
+        # key = key_org
+        query = enable_manual_sharding_wrapper(query_org, (None, 'axis'))
+        # query = query_org
+        value = enable_manual_sharding_wrapper(value_org, (None, 'axis'))
+        # value = value_org
+        kv_cache = enable_manual_sharding_wrapper(kv_cache_org, (None, None, 'axis', None))
+        # kv_cache = kv_cache_org
+
+        print(f"hosseins: PallasAttentionBackend.forward() 0 {get_shard_spec(query)=} {query.shape=}")
+        print(f"hosseins: PallasAttentionBackend.forward() 0 {get_shard_spec(key)=} {key.shape=}")
+        print(f"hosseins: PallasAttentionBackend.forward() 0 {get_shard_spec(value)=} {value.shape=}")
+        print(f"hosseins: PallasAttentionBackend.forward() 0 {get_shard_spec(kv_cache)=} {kv_cache.shape=}")
 
         assert layer._k_scale_float == 1.0 and layer._v_scale_float == 1.0
-        num_tokens, hidden_size = query.shape
+        num_tokens, hidden_size = query_org.shape
+        print(f"hosseins: PallasAttentionBackend.forward() 0 {self.num_heads=}")
+        print(f"hosseins: PallasAttentionBackend.forward() 0 {self.head_size=}")
+        print(f"hosseins: PallasAttentionBackend.forward() 0 {num_tokens=}")
+        print(f"hosseins: PallasAttentionBackend.forward() 0 {hidden_size=}")
         with xp.Trace("PallasAttentionBackend.forward.view()"):
-            query = query.view(num_tokens, self.num_heads, self.head_size)
+            query = query.view(num_tokens, max(1, self.num_heads // len(get_device_ids())) if (is_spmd() and True) else self.num_heads, self.head_size)
+        print(f"hosseins: PallasAttentionBackend.forward() after {get_shard_spec(query)=} {query.shape=}")
 
         with xp.Trace("PallasAttentionBackend.forward.write_to_kv_cache()"):
             if kv_cache.numel() > 0:
@@ -180,9 +206,38 @@ class PallasAttentionBackendImpl(AttentionImpl):
                 vmem_limit_bytes=self.vmem_limit_bytes,
                 use_kernel=True,
                 sm_scale=self.scale)
+        
+        # test_unsharded = torch.zeros((num_tokens, hidden_size // 4), device=output.device, dtype=torch.bfloat16)
+        # print(f"hosseins: PallasAttentionBackend.forward() 0 {get_shard_spec(test_unsharded)=} {test_unsharded.shape=}")
+        # test_unsharded_output = F.linear(test_unsharded, test_unsharded)
+        # print(f"hosseins: PallasAttentionBackend.forward() 0 {get_shard_spec(test_unsharded_output)=} {test_unsharded_output.shape=}")
+        # test_sharded = disable_manual_sharding_wrapper(test_unsharded, (None, 'axis'), torch.Size((num_tokens, hidden_size)))
+        # print(f"hosseins: PallasAttentionBackend.forward() 0 {get_shard_spec(test_sharded)=} {test_sharded.shape=}")
 
-        return output.reshape(num_tokens, hidden_size)
+        # key_man_shard = enable_manual_sharding_wrapper(key_org, (None, 'axis'))
+        # print(f"hosseins: PallasAttentionBackend.forward() 0 {get_shard_spec(key_man_shard)=} {key_man_shard.shape=}")
+        # key_sharded = disable_manual_sharding_wrapper(key_man_shard, (None, 'axis'), key_org.shape)
+        # print(f"hosseins: PallasAttentionBackend.forward() 0 {get_shard_spec(key_sharded)=} {key_sharded.shape=}")
+        
+        # xm.mark_step()
 
+        # print(f"hosseins: PallasAttentionBackend.forward() 1 {get_shard_spec(test_unsharded)=} {test_unsharded.shape=}")
+        # print(f"hosseins: PallasAttentionBackend.forward() 1 {get_shard_spec(test_sharded)=} {test_sharded.shape=}")
+
+        print(f"hosseins: PallasAttentionBackend.forward() 1 {get_shard_spec(query_org)=} {query_org.shape=}")
+        print(f"hosseins: PallasAttentionBackend.forward() 1 {get_shard_spec(key_org)=} {key_org.shape=}")
+        print(f"hosseins: PallasAttentionBackend.forward() 1 {get_shard_spec(value_org)=} {value_org.shape=}")
+
+        print(f"hosseins: PallasAttentionBackend.forward() 0 {get_shard_spec(output)=} {output.shape=}")
+        output_shape = output.shape
+        new_output = disable_manual_sharding_wrapper(output, (None, 'axis', None), torch.Size((output_shape[0], output_shape[1] * 4, output_shape[2])))
+        # new_output = output
+        print(f"hosseins: PallasAttentionBackend.forward() 0 {get_shard_spec(new_output)=} {new_output.shape=}")
+        true_out = new_output.reshape(num_tokens, hidden_size)
+        print(f"hosseins: PallasAttentionBackend.forward() 0 {get_shard_spec(true_out)=} {true_out.shape=}")
+        # xm.mark_step()
+        return true_out
+# %copy-done.403
 
 def write_to_kv_cache(
     key: torch.Tensor,
@@ -200,8 +255,9 @@ def write_to_kv_cache(
     """
     _, _, num_combined_kv_heads, head_size = kv_cache.shape
     num_kv_heads = num_combined_kv_heads // 2
-    print(f"hosseins: write_to_kv_cache() 1 {get_shard_spec(key)=} {value.shape=}")
+    print(f"hosseins: write_to_kv_cache() 1 {get_shard_spec(key)=} {key.shape=}")
     print(f"hosseins: write_to_kv_cache() 1 {get_shard_spec(value)=} {value.shape=}")
+    print(f"hosseins: write_to_kv_cache() 1 {get_shard_spec(kv_cache)=} {kv_cache.shape=}")
 
     key = key.view(-1, num_kv_heads, head_size)
     value = value.view(-1, num_kv_heads, head_size)

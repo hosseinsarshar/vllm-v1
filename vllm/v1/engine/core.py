@@ -39,6 +39,7 @@ from vllm.v1.request import Request, RequestStatus
 from vllm.v1.serial_utils import MsgpackDecoder, MsgpackEncoder
 from vllm.v1.structured_output import StructuredOutputManager
 from vllm.version import __version__ as VLLM_VERSION
+import torch_xla.debug.profiler as xp
 
 logger = init_logger(__name__)
 
@@ -199,9 +200,10 @@ class EngineCore:
 
     def step(self) -> EngineCoreOutputs:
         """Schedule, execute, and make output."""
-
-        # Check for any requests remaining in the scheduler - unfinished,
-        # or finished and not yet removed from the batch.
+        print(f'hosseins: EngineCore.step() starts')
+        # with xp.Trace("EngineCore.step()"):
+            # Check for any requests remaining in the scheduler - unfinished,
+            # or finished and not yet removed from the batch.
         if not self.scheduler.has_requests():
             return EngineCoreOutputs(
                 outputs=[],
@@ -211,7 +213,7 @@ class EngineCore:
         output = self.model_executor.execute_model(scheduler_output)
         engine_core_outputs = self.scheduler.update_from_output(
             scheduler_output, output)  # type: ignore
-
+        print(f'hosseins: EngineCore.step() ends')
         return engine_core_outputs
 
     def step_with_batch_queue(self) -> Optional[EngineCoreOutputs]:

@@ -486,23 +486,24 @@ class ColumnParallelLinear(LinearBase):
     ) -> Union[torch.Tensor, tuple[torch.Tensor, Optional[Parameter]]]:
         print(f"hosseins: ColumnParallelLinear -> forward() {type(self)=}")
         print(f"hosseins: ColumnParallelLinear -> forward() {type(self.quant_method)=}")
-        bias = self.bias if not self.skip_bias_add else None
+        with xp.Trace("ColumnParallelLinear.forward()"):
+            bias = self.bias if not self.skip_bias_add else None
 
-        # Matrix multiply.
-        assert self.quant_method is not None
-        with xp.Trace("ColumnParallelLinear.forward.quant_method.apply()"):
-            output_parallel = self.quant_method.apply(self, input_, bias)
-            if self.gather_output:
-                # All-gather across the partitions.
-                output = tensor_model_parallel_all_gather(output_parallel)
-            else:
-                output = output_parallel
+            # Matrix multiply.
+            assert self.quant_method is not None
+            with xp.Trace("ColumnParallelLinear.forward.quant_method.apply()"):
+                output_parallel = self.quant_method.apply(self, input_, bias)
+                if self.gather_output:
+                    # All-gather across the partitions.
+                    output = tensor_model_parallel_all_gather(output_parallel)
+                else:
+                    output = output_parallel
 
-        print(f"hosseins: ColumnParallelLinear -> forward() {get_shard_spec(output)=}")
-        output_bias = self.bias if self.skip_bias_add else None
-        if not self.return_bias:
-            return output
-        return output, output_bias
+            print(f"hosseins: ColumnParallelLinear -> forward() {get_shard_spec(output)=}")
+            output_bias = self.bias if self.skip_bias_add else None
+            if not self.return_bias:
+                return output
+            return output, output_bias
 
     def extra_repr(self) -> str:
         s = f"in_features={self.input_size}"
@@ -1335,12 +1336,12 @@ class RowParallelLinear(LinearBase):
                     input_, num_partitions=self.tp_size)
                 input_parallel = splitted_input[tp_rank].contiguous()
 
-        # Matrix multiply.
-        assert self.quant_method is not None
-        # Only fuse bias add into GEMM for rank 0 (this ensures that
-        # bias will not get added more than once in TP>1 case)
-        bias_ = None if (self.tp_rank > 0 or self.skip_bias_add) else self.bias
         with xp.Trace("RowParallelLinear.apply()"):
+            # Matrix multiply.
+            assert self.quant_method is not None
+            # Only fuse bias add into GEMM for rank 0 (this ensures that
+            # bias will not get added more than once in TP>1 case)
+            bias_ = None if (self.tp_rank > 0 or self.skip_bias_add) else self.bias
             output_parallel = self.quant_method.apply(self,
                                                     input_parallel,
                                                     bias=bias_)
@@ -1533,18 +1534,18 @@ class QKVCrossParallelLinear(LinearBase):
         encoder_hidden_states: torch.Tensor,
     ) -> tuple[torch.Tensor, ...]:
         print(f"hosseins: QKVCrossParallelLinear -> forward() {type(self)=}")
-
-        q, _ = self.q_proj_decoder(decoder_hidden_states)
-        if encoder_hidden_states is None:
-            # Encoder KV already cached.
-            k = None
-            v = None
-        else:
-            # Prefill phase, encoder KV cached here.
-            kv_enc, _ = self.kv_proj_encoder(encoder_hidden_states)
-            # Split kv in half
-            k, v = kv_enc.split(self.kv_size, dim=-1)
-        return q, k, v
+        with xp.Trace("QKVCrossParallelLinear.forward()"):
+            q, _ = self.q_proj_decoder(decoder_hidden_states)
+            if encoder_hidden_states is None:
+                # Encoder KV already cached.
+                k = None
+                v = None
+            else:
+                # Prefill phase, encoder KV cached here.
+                kv_enc, _ = self.kv_proj_encoder(encoder_hidden_states)
+                # Split kv in half
+                k, v = kv_enc.split(self.kv_size, dim=-1)
+            return q, k, v
 
     def weight_loader(self,
                       param: torch.nn.Parameter,

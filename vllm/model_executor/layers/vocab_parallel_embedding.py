@@ -16,6 +16,7 @@ from vllm.model_executor.parameter import BasevLLMParameter
 from vllm.model_executor.utils import set_weight_attrs
 from vllm.platforms import current_platform
 from vllm.distributed.utils import get_mesh, get_col_parallel_partition_spec, get_row_parallel_partition_spec, shard_spmd, get_shard_spec
+import torch_xla.debug.profiler as xp
 
 DEFAULT_VOCAB_PADDING_SIZE = 64
 
@@ -44,15 +45,16 @@ class UnquantizedEmbeddingMethod(QuantizeMethodBase):
         print(f"hosseins: UnquantizedEmbeddingMethod -> apply()")
         print(f"hosseins: UnquantizedEmbeddingMethod -> apply() [{layer.weight.shape=}]")
         print(f"hosseins: UnquantizedEmbeddingMethod -> apply() [{layer.weight.device=}]")
-
-        return F.linear(x, layer.weight, bias)
+        with xp.Trace("UnquantizedEmbeddingMethod.apply()"):
+            return F.linear(x, layer.weight, bias)
 
     def embedding(self, layer: torch.nn.Module,
                   input_: torch.Tensor) -> torch.Tensor:
         print(f"hosseins: UnquantizedEmbeddingMethod -> embedding()")
         print(f"hosseins: UnquantizedEmbeddingMethod -> embedding() [{layer.weight.shape=}]")
         print(f"hosseins: UnquantizedEmbeddingMethod -> embedding() [{layer.weight.device=}]")
-        return F.embedding(input_, layer.weight)
+        with xp.Trace("UnquantizedEmbeddingMethod.embedding()"):
+            return F.embedding(input_, layer.weight)
 
 
 def pad_vocab_size(vocab_size: int,
@@ -151,17 +153,18 @@ def get_masked_input_and_mask(
         added_vocab_end_index: int) -> Tuple[torch.Tensor, torch.Tensor]:
     # torch.compile will fuse all of the pointwise ops below
     # into a single kernel, making it very fast
-    org_vocab_mask = (input_ >= org_vocab_start_index) & (
-        input_ < org_vocab_end_index)
-    added_vocab_mask = (input_ >= added_vocab_start_index) & (
-        input_ < added_vocab_end_index)
-    added_offset = added_vocab_start_index - (
-        org_vocab_end_index - org_vocab_start_index) - num_org_vocab_padding
-    valid_offset = (org_vocab_start_index *
-                    org_vocab_mask) + (added_offset * added_vocab_mask)
-    vocab_mask = org_vocab_mask | added_vocab_mask
-    input_ = vocab_mask * (input_ - valid_offset)
-    return input_, ~vocab_mask
+    with xp.Trace("UnquantizedEmbeddingMethod.get_masked_input_and_mask()"):
+        org_vocab_mask = (input_ >= org_vocab_start_index) & (
+            input_ < org_vocab_end_index)
+        added_vocab_mask = (input_ >= added_vocab_start_index) & (
+            input_ < added_vocab_end_index)
+        added_offset = added_vocab_start_index - (
+            org_vocab_end_index - org_vocab_start_index) - num_org_vocab_padding
+        valid_offset = (org_vocab_start_index *
+                        org_vocab_mask) + (added_offset * added_vocab_mask)
+        vocab_mask = org_vocab_mask | added_vocab_mask
+        input_ = vocab_mask * (input_ - valid_offset)
+        return input_, ~vocab_mask
 
 
 class VocabParallelEmbedding(torch.nn.Module):
@@ -285,27 +288,29 @@ class VocabParallelEmbedding(torch.nn.Module):
         """Get start and end indices for vocab parallel embedding, following the
         layout outlined in the class docstring, based on the given tp_rank and
         tp_size."""
-        num_added_embeddings_padded = vocab_size_padded - org_vocab_size_padded
-        padded_org_vocab_start_index, padded_org_vocab_end_index = (
-            vocab_range_from_global_vocab_size(org_vocab_size_padded, tp_rank,
-                                               tp_size))
-        padded_added_vocab_start_index, padded_added_vocab_end_index = (
-            vocab_range_from_global_vocab_size(num_added_embeddings_padded,
-                                               tp_rank,
-                                               tp_size,
-                                               offset=org_vocab_size))
-        # remove padding
-        org_vocab_start_index = min(padded_org_vocab_start_index,
-                                    org_vocab_size)
-        org_vocab_end_index = min(padded_org_vocab_end_index, org_vocab_size)
-        added_vocab_start_index = min(padded_added_vocab_start_index,
-                                      vocab_size)
-        added_vocab_end_index = min(padded_added_vocab_end_index, vocab_size)
-        return VocabParallelEmbeddingShardIndices(
-            padded_org_vocab_start_index, padded_org_vocab_end_index,
-            padded_added_vocab_start_index, padded_added_vocab_end_index,
-            org_vocab_start_index, org_vocab_end_index,
-            added_vocab_start_index, added_vocab_end_index)
+        print(f"hosseins: VocabParallelEmbedding._get_indices()")
+        with xp.Trace("VocabParallelEmbedding._get_indices()"):
+            num_added_embeddings_padded = vocab_size_padded - org_vocab_size_padded
+            padded_org_vocab_start_index, padded_org_vocab_end_index = (
+                vocab_range_from_global_vocab_size(org_vocab_size_padded, tp_rank,
+                                                tp_size))
+            padded_added_vocab_start_index, padded_added_vocab_end_index = (
+                vocab_range_from_global_vocab_size(num_added_embeddings_padded,
+                                                tp_rank,
+                                                tp_size,
+                                                offset=org_vocab_size))
+            # remove padding
+            org_vocab_start_index = min(padded_org_vocab_start_index,
+                                        org_vocab_size)
+            org_vocab_end_index = min(padded_org_vocab_end_index, org_vocab_size)
+            added_vocab_start_index = min(padded_added_vocab_start_index,
+                                        vocab_size)
+            added_vocab_end_index = min(padded_added_vocab_end_index, vocab_size)
+            return VocabParallelEmbeddingShardIndices(
+                padded_org_vocab_start_index, padded_org_vocab_end_index,
+                padded_added_vocab_start_index, padded_added_vocab_end_index,
+                org_vocab_start_index, org_vocab_end_index,
+                added_vocab_start_index, added_vocab_end_index)
 
     def get_sharded_to_full_mapping(self) -> Optional[List[int]]:
         """Get a mapping that can be used to reindex the gathered
@@ -363,6 +368,7 @@ class VocabParallelEmbedding(torch.nn.Module):
         if getattr(param, "is_gguf_weight_type", None):
             param.data.copy_(loaded_weight)
             param.weight_type = loaded_weight.item()
+            shard_spmd(data=param.data, mesh=self.mesh, partition_spec=get_col_parallel_partition_spec())
             return
         elif isinstance(param, UninitializedParameter):
             shape = list(loaded_weight.shape)
@@ -375,6 +381,8 @@ class VocabParallelEmbedding(torch.nn.Module):
         if output_dim is None:
             assert param.data.shape == loaded_weight.shape
             param.data.copy_(loaded_weight)
+            shard_spmd(data=param.data, mesh=self.mesh, partition_spec=get_col_parallel_partition_spec())
+
             return
 
         # Shard indexes for loading the weight
@@ -412,32 +420,33 @@ class VocabParallelEmbedding(torch.nn.Module):
             param[:loaded_weight.shape[0]].data.copy_(loaded_weight)
             param[loaded_weight.shape[0]:].data.fill_(0)
 
-        # shard_spmd(data=param.data, mesh=self.mesh, partition_spec=get_col_parallel_partition_spec())
+        shard_spmd(data=param.data, mesh=self.mesh, partition_spec=get_col_parallel_partition_spec())
 
     def forward(self, input_):
-        print("hosseins: VocabParallelEmbedding.forward()")
-        if self.tp_size > 1:
-            # Build the mask.
-            masked_input, input_mask = get_masked_input_and_mask(
-                input_, self.shard_indices.org_vocab_start_index,
-                self.shard_indices.org_vocab_end_index,
-                self.shard_indices.num_org_vocab_padding,
-                self.shard_indices.added_vocab_start_index,
-                self.shard_indices.added_vocab_end_index)
-        else:
-            masked_input = input_
-        print(f"hosseins: VocabParallelEmbedding.forward() [{get_shard_spec(masked_input)=}]")
-        # Get the embeddings.
-        output_parallel = self.quant_method.embedding(self,
-                                                      masked_input.long())
-        print(f"hosseins: VocabParallelEmbedding.forward() [{get_shard_spec(output_parallel)=}]")
-        # Mask the output embedding.
-        if self.tp_size > 1:
-            output_parallel.masked_fill_(input_mask.unsqueeze(-1), 0)
-        # Reduce across all the model parallel GPUs.
-        output = tensor_model_parallel_all_reduce(output_parallel)
-        print(f"hosseins: VocabParallelEmbedding.forward() [{get_shard_spec(output)=}]")
-        return output
+        print(f"hosseins: VocabParallelEmbedding.forward() [{input_.shape}]")
+        with xp.Trace("VocabParallelEmbedding.forward()"):
+            if self.tp_size > 1:
+                # Build the mask.
+                masked_input, input_mask = get_masked_input_and_mask(
+                    input_, self.shard_indices.org_vocab_start_index,
+                    self.shard_indices.org_vocab_end_index,
+                    self.shard_indices.num_org_vocab_padding,
+                    self.shard_indices.added_vocab_start_index,
+                    self.shard_indices.added_vocab_end_index)
+            else:
+                masked_input = input_
+            print(f"hosseins: VocabParallelEmbedding.forward() [{get_shard_spec(masked_input)=}]")
+            # Get the embeddings.
+            output_parallel = self.quant_method.embedding(self,
+                                                        masked_input.long())
+            print(f"hosseins: VocabParallelEmbedding.forward() [{get_shard_spec(output_parallel)=}]")
+            # Mask the output embedding.
+            if self.tp_size > 1:
+                output_parallel.masked_fill_(input_mask.unsqueeze(-1), 0)
+            # Reduce across all the model parallel GPUs.
+            output = tensor_model_parallel_all_reduce(output_parallel)
+            print(f"hosseins: VocabParallelEmbedding.forward() [{get_shard_spec(output)=}]")
+            return output
 
     def extra_repr(self) -> str:
         s = f"num_embeddings={self.num_embeddings_per_partition}"
