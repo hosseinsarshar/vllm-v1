@@ -235,9 +235,9 @@ class PallasAttentionBackendImpl(AttentionImpl):
         print(f"hosseins: PallasAttentionBackend.forward() 0 {get_shard_spec(new_output)=} {new_output.shape=}")
         true_out = new_output.reshape(num_tokens, hidden_size)
         print(f"hosseins: PallasAttentionBackend.forward() 0 {get_shard_spec(true_out)=} {true_out.shape=}")
-        # xm.mark_step()
+
         return true_out
-# %copy-done.403
+
 
 def write_to_kv_cache(
     key: torch.Tensor,
