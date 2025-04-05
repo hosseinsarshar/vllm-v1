@@ -10,6 +10,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.log
+output_spmd_no_compile_april_man.log
 # C extensions
 *.so
 script.sh
