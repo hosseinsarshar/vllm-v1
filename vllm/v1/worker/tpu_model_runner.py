@@ -789,60 +789,60 @@ class TPUModelRunner:
     @torch.no_grad()
     def _dummy_run(self, kv_caches, num_tokens: int) -> None:
         print("hosseins: TPUModelRunner._dummy_run()")
-        # with xp.Trace("TPUModelRunner._dummy_run()"):
-        if self.is_multimodal_model:
-            input_ids = None
-            inputs_embeds = torch.zeros((num_tokens, self.hidden_size),
-                                        dtype=self.dtype,
+        with xp.Trace("TPUModelRunner._dummy_run()"):
+            if self.is_multimodal_model:
+                input_ids = None
+                inputs_embeds = torch.zeros((num_tokens, self.hidden_size),
+                                            dtype=self.dtype,
+                                            device=self.device)
+            else:
+                input_ids = torch.zeros((num_tokens),
+                                        dtype=torch.int32,
                                         device=self.device)
-        else:
-            input_ids = torch.zeros((num_tokens),
+                inputs_embeds = None
+            actual_num_reqs = min(num_tokens, self.max_num_reqs)
+            position_ids = torch.zeros(num_tokens,
                                     dtype=torch.int32,
                                     device=self.device)
-            inputs_embeds = None
-        actual_num_reqs = min(num_tokens, self.max_num_reqs)
-        position_ids = torch.zeros(num_tokens,
-                                dtype=torch.int32,
-                                device=self.device)
-        slot_mapping = torch.zeros(num_tokens,
-                                dtype=torch.int64,
-                                device=self.device)
-        block_tables = torch.zeros(
-            (self.max_num_reqs, self.block_table_cpu.shape[1]),
-            dtype=torch.int32,
-            device=self.device)
-        query_lens = [1] * self.max_num_reqs
-        query_start_loc = torch.cumsum(torch.tensor([0] + query_lens,
-                                                    dtype=torch.int32),
-                                    dim=0,
-                                    dtype=torch.int32).to(self.device)
-        context_lens = torch.ones((self.max_num_reqs, ),
-                                dtype=torch.int32,
-                                device=self.device)
-        num_seqs = torch.tensor([actual_num_reqs],
-                                dtype=torch.int32,
-                                device=self.device)
-        attn_metadata = PallasMetadata(
-            slot_mapping=slot_mapping,
-            block_tables=block_tables,
-            context_lens=context_lens,
-            query_start_loc=query_start_loc,
-            num_seqs=num_seqs,
-        )
+            slot_mapping = torch.zeros(num_tokens,
+                                    dtype=torch.int64,
+                                    device=self.device)
+            block_tables = torch.zeros(
+                (self.max_num_reqs, self.block_table_cpu.shape[1]),
+                dtype=torch.int32,
+                device=self.device)
+            query_lens = [1] * self.max_num_reqs
+            query_start_loc = torch.cumsum(torch.tensor([0] + query_lens,
+                                                        dtype=torch.int32),
+                                        dim=0,
+                                        dtype=torch.int32).to(self.device)
+            context_lens = torch.ones((self.max_num_reqs, ),
+                                    dtype=torch.int32,
+                                    device=self.device)
+            num_seqs = torch.tensor([actual_num_reqs],
+                                    dtype=torch.int32,
+                                    device=self.device)
+            attn_metadata = PallasMetadata(
+                slot_mapping=slot_mapping,
+                block_tables=block_tables,
+                context_lens=context_lens,
+                query_start_loc=query_start_loc,
+                num_seqs=num_seqs,
+            )
 
-        if self.is_multimodal_model:
-            torch._dynamo.mark_dynamic(inputs_embeds, 0)
-        else:
-            torch._dynamo.mark_dynamic(input_ids, 0)
-        torch._dynamo.mark_dynamic(position_ids, 0)
-        torch._dynamo.mark_dynamic(attn_metadata.slot_mapping, 0)
+            if self.is_multimodal_model:
+                torch._dynamo.mark_dynamic(inputs_embeds, 0)
+            else:
+                torch._dynamo.mark_dynamic(input_ids, 0)
+            torch._dynamo.mark_dynamic(position_ids, 0)
+            torch._dynamo.mark_dynamic(attn_metadata.slot_mapping, 0)
 
-        with set_forward_context(attn_metadata, self.vllm_config, 0):
-            out = self.model(input_ids=input_ids,
-                            positions=position_ids,
-                            kv_caches=kv_caches,
-                            inputs_embeds=inputs_embeds)
-        self._hidden_states_dtype = out.dtype
+            with set_forward_context(attn_metadata, self.vllm_config, 0):
+                out = self.model(input_ids=input_ids,
+                                positions=position_ids,
+                                kv_caches=kv_caches,
+                                inputs_embeds=inputs_embeds)
+            self._hidden_states_dtype = out.dtype
 
     def capture_model(self) -> None:
         """Compile the model."""
@@ -989,21 +989,21 @@ class ModelWrapperV1(nn.Module):
         print(f"hosseins: ModelWrapperV1 -> forward() 1 {get_shard_spec(input_ids)=}")
         print(f"hosseins: ModelWrapperV1 -> forward() 1 {get_shard_spec(positions)=}")
         # print(f"hosseins: ModelWrapperV1 -> forward() 1 {get_shard_spec(inputs_embeds)=}")
-        # with xp.Trace("ModelWrapperV1.forward()"):
-        assert self.model is not None
-        
-        hidden_states = self.model(
-            input_ids=input_ids,
-            positions=positions,
-            inputs_embeds=inputs_embeds,
-        )
+        with xp.Trace("ModelWrapperV1.forward()"):
+            assert self.model is not None
+            
+            hidden_states = self.model(
+                input_ids=input_ids,
+                positions=positions,
+                inputs_embeds=inputs_embeds,
+            )
 
-        print(f"hosseins: ModelWrapperV1 -> forward() 2 {get_shard_spec(hidden_states)=}")
-        print(f"hosseins: ModelWrapperV1 -> forward() 2 {get_shard_spec(input_ids)=}")
-        print(f"hosseins: ModelWrapperV1 -> forward() 2 {get_shard_spec(positions)=}")
-        # print(f"hosseins: ModelWrapperV1 -> forward() 2 {get_shard_spec(inputs_embeds)=}")
+            print(f"hosseins: ModelWrapperV1 -> forward() 2 {get_shard_spec(hidden_states)=}")
+            print(f"hosseins: ModelWrapperV1 -> forward() 2 {get_shard_spec(input_ids)=}")
+            print(f"hosseins: ModelWrapperV1 -> forward() 2 {get_shard_spec(positions)=}")
+            # print(f"hosseins: ModelWrapperV1 -> forward() 2 {get_shard_spec(inputs_embeds)=}")
 
-        return hidden_states
+            return hidden_states
 
     def sample_from_hidden(
         self,

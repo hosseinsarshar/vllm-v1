@@ -226,8 +226,8 @@ class LlamaAttention(nn.Module):
             q, k, v = qkv.split([self.q_size, self.kv_size, self.kv_size], dim=-1)
         with xp.Trace("LlamaAttention.forward.rotary_emb()"):
             q, k = self.rotary_emb(positions, q, k)
-        # with xp.Trace("LlamaAttention.forward.attn()"):
-        attn_output = self.attn(q, k, v)
+        with xp.Trace("LlamaAttention.forward.attn()"):
+            attn_output = self.attn(q, k, v)
         print(f"hosseins: LlamaAttention.forward() {attn_output.shape=}")
         print(f"hosseins: LlamaAttention.forward() {attn_output.device=}")
         with xp.Trace("LlamaAttention.forward.o_proj()"):
@@ -309,9 +309,9 @@ class LlamaDecoderLayer(nn.Module):
                 hidden_states, residual = self.input_layernorm(
                     hidden_states, residual)
         
-        # with xp.Trace("LlamaDecoderLayer.forward.self_attn()"):
-        hidden_states = self.self_attn(positions=positions,
-                                    hidden_states=hidden_states)
+        with xp.Trace("LlamaDecoderLayer.forward.self_attn()"):
+            hidden_states = self.self_attn(positions=positions,
+                                        hidden_states=hidden_states)
 
         print(f"hosseins: LlamaDecoderLayer.forward() {hidden_states.shape=}")
         print(f"hosseins: LlamaDecoderLayer.forward() {get_shard_spec(hidden_states)=}")
@@ -399,41 +399,41 @@ class LlamaModel(nn.Module):
         print("hosseins: LlamaModel.forward()")
         print(f"hosseins: LlamaModel.forward() {get_pp_group().is_first_rank=}")
         
-        # with xp.Trace("LlamaModel.forward()"):
-        if get_pp_group().is_first_rank:
-            if inputs_embeds is not None:
-                hidden_states = inputs_embeds
+        with xp.Trace("LlamaModel.forward()"):
+            if get_pp_group().is_first_rank:
+                if inputs_embeds is not None:
+                    hidden_states = inputs_embeds
+                else:
+                        hidden_states = self.get_input_embeddings(input_ids)
+                residual = None
             else:
-                    hidden_states = self.get_input_embeddings(input_ids)
-            residual = None
-        else:
-            assert intermediate_tensors is not None
-            hidden_states = intermediate_tensors["hidden_states"]
-            residual = intermediate_tensors["residual"]
+                assert intermediate_tensors is not None
+                hidden_states = intermediate_tensors["hidden_states"]
+                residual = intermediate_tensors["residual"]
 
-        print(f"hosseins: LlamaModel.forward() 1 {get_shard_spec(hidden_states)=}")
+            print(f"hosseins: LlamaModel.forward() 1 {get_shard_spec(hidden_states)=}")
 
-        print("hosseins: LlamaModel.forward() layer start")
-        counter = 0
-        for layer in self.layers[self.start_layer:self.end_layer]:
-            self.get_layer_status(layer)
-            # with xp.Trace(f"LlamaModel.forward.layer() [{counter}]"):
-            hidden_states, residual = layer(positions, hidden_states, residual)
-            counter += 1
+            print("hosseins: LlamaModel.forward() layer start")
+            counter = 0
+            for layer in self.layers[self.start_layer:self.end_layer]:
+                self.get_layer_status(layer)
+                # with xp.Trace(f"LlamaModel.forward.layer() [{counter}]"):
+                hidden_states, residual = layer(positions, hidden_states, residual)
+                counter += 1
 
-        print("hosseins: LlamaModel.forward() layer end")
+            print("hosseins: LlamaModel.forward() layer end")
 
-        if not get_pp_group().is_last_rank:
-            return IntermediateTensors({
-                "hidden_states": hidden_states,
-                "residual": residual
-            })
-        print("hosseins: LlamaModel.forward() norm start")
-        # with xp.Trace("LlamaModel.forward.norm()"):
-        hidden_states, _ = self.norm(hidden_states, residual)
-        print("hosseins: LlamaModel.forward() norm end")
+            if not get_pp_group().is_last_rank:
+                return IntermediateTensors({
+                    "hidden_states": hidden_states,
+                    "residual": residual
+                })
+            print("hosseins: LlamaModel.forward() norm start")
+            # with xp.Trace("LlamaModel.forward.norm()"):
+            hidden_states, _ = self.norm(hidden_states, residual)
+            print("hosseins: LlamaModel.forward() norm end")
 
-        return hidden_states
+            return hidden_states
 
     def load_weights(self, weights: Iterable[Tuple[str,
                                                    torch.Tensor]]) -> Set[str]:
@@ -609,10 +609,10 @@ class LlamaForCausalLM(nn.Module, SupportsLoRA, SupportsPP):
         inputs_embeds: Optional[torch.Tensor] = None,
     ) -> Union[torch.Tensor, IntermediateTensors]:
         print("hosseins: LlamaForCasualLM.forward()")
-        # with xp.Trace("LlamaForCasualLM.forward()"):
-        model_output = self.model(input_ids, positions, intermediate_tensors,
-                                    inputs_embeds)
-        return model_output
+        with xp.Trace("LlamaForCasualLM.forward()"):
+            model_output = self.model(input_ids, positions, intermediate_tensors,
+                                        inputs_embeds)
+            return model_output
 
     def compute_logits(
         self,

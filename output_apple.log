@@ -1,122 +1,0 @@
-nohup: ignoring input
-WARNING:root:libtpu.so and TPU device found. Setting PJRT_DEVICE=TPU.
-INFO 03-13 17:14:06 [__init__.py:256] Automatically detected platform tpu.
-INFO 03-13 17:14:07 [api_server.py:912] vLLM API server version 0.7.4.dev339+ga21076ed.d20250312
-INFO 03-13 17:14:07 [api_server.py:913] args: Namespace(subparser='serve', model_tag='mistralai/Mixtral-8x7B-Instruct-v0.1', config='', host=None, port=8000, uvicorn_log_level='info', allow_credentials=False, allowed_origins=['*'], allowed_methods=['*'], allowed_headers=['*'], api_key=None, lora_modules=None, prompt_adapters=None, chat_template=None, chat_template_content_format='auto', response_role='assistant', ssl_keyfile=None, ssl_certfile=None, ssl_ca_certs=None, enable_ssl_refresh=False, ssl_cert_reqs=0, root_path=None, middleware=[], return_tokens_as_token_ids=False, disable_frontend_multiprocessing=False, enable_request_id_headers=False, enable_auto_tool_choice=False, tool_call_parser=None, tool_parser_plugin='', model='mistralai/Mixtral-8x7B-Instruct-v0.1', task='auto', tokenizer=None, hf_config_path=None, skip_tokenizer_init=False, revision=None, code_revision=None, tokenizer_revision=None, tokenizer_mode='auto', trust_remote_code=True, allowed_local_media_path=None, download_dir='/dev/shm', load_format='auto', config_format=<ConfigFormat.AUTO: 'auto'>, dtype='auto', kv_cache_dtype='auto', max_model_len=4096, guided_decoding_backend='xgrammar', logits_processor_pattern=None, model_impl='auto', distributed_executor_backend=None, pipeline_parallel_size=1, tensor_parallel_size=4, enable_expert_parallel=False, max_parallel_loading_workers=None, ray_workers_use_nsight=False, block_size=None, enable_prefix_caching=None, disable_sliding_window=False, use_v2_block_manager=True, num_lookahead_slots=0, seed=42, swap_space=4, cpu_offload_gb=0, gpu_memory_utilization=0.9, num_gpu_blocks_override=None, max_num_batched_tokens=512, max_num_partial_prefills=1, max_long_partial_prefills=1, long_prefill_token_threshold=0, max_num_seqs=512, max_logprobs=20, disable_log_stats=False, quantization=None, rope_scaling=None, rope_theta=None, hf_overrides=None, enforce_eager=False, max_seq_len_to_capture=8192, disable_custom_all_reduce=False, tokenizer_pool_size=0, tokenizer_pool_type='ray', tokenizer_pool_extra_config=None, limit_mm_per_prompt=None, mm_processor_kwargs=None, disable_mm_preprocessor_cache=False, enable_lora=False, enable_lora_bias=False, max_loras=1, max_lora_rank=16, lora_extra_vocab_size=256, lora_dtype='auto', long_lora_scaling_factors=None, max_cpu_loras=None, fully_sharded_loras=False, enable_prompt_adapter=False, max_prompt_adapters=1, max_prompt_adapter_token=0, device='auto', num_scheduler_steps=1, use_tqdm_on_load=True, multi_step_stream_outputs=True, scheduler_delay_factor=0.0, enable_chunked_prefill=None, speculative_model=None, speculative_model_quantization=None, num_speculative_tokens=None, speculative_disable_mqa_scorer=False, speculative_draft_tensor_parallel_size=None, speculative_max_model_len=None, speculative_disable_by_batch_size=None, ngram_prompt_lookup_max=None, ngram_prompt_lookup_min=None, spec_decoding_acceptance_method='rejection_sampler', typical_acceptance_sampler_posterior_threshold=None, typical_acceptance_sampler_posterior_alpha=None, disable_logprobs_during_spec_decoding=None, model_loader_extra_config=None, ignore_patterns=[], preemption_mode=None, served_model_name=None, qlora_adapter_name_or_path=None, show_hidden_metrics_for_version=None, otlp_traces_endpoint=None, collect_detailed_traces=None, disable_async_output_proc=False, scheduling_policy='fcfs', scheduler_cls='vllm.core.scheduler.Scheduler', override_neuron_config=None, override_pooler_config=None, compilation_config=None, kv_transfer_config=None, worker_cls='auto', worker_extension_cls='', generation_config='auto', override_generation_config=None, enable_sleep_mode=False, calculate_kv_scales=False, additional_config=None, enable_reasoning=False, reasoning_parser=None, disable_log_requests=True, max_log_len=None, disable_fastapi_docs=False, enable_prompt_tokens_details=False, dispatch_function=<function ServeSubcommand.cmd at 0x799c757b5ab0>)
-INFO 03-13 17:14:13 [config.py:576] This model supports multiple tasks: {'reward', 'classify', 'embed', 'generate', 'score'}. Defaulting to 'generate'.
-INFO 03-13 17:14:13 [config.py:1666] Chunked prefill is enabled with max_num_batched_tokens=512.
-INFO 03-13 17:14:13 [tpu.py:76] [TPU] Forcing DYNAMO_ONCE compilation level
-WARNING 03-13 17:14:13 [tpu.py:108] [V1][TPU] Disable prefix caching
-/home/hosseins/vllm-v1/vllm/transformers_utils/tokenizer_group/tokenizer_group.py:25: FutureWarning: It is strongly recommended to run mistral models with `--tokenizer-mode "mistral"` to ensure correct encoding and decoding.
-  self.tokenizer = get_tokenizer(self.tokenizer_id, **tokenizer_config)
-INFO 03-13 17:14:16 [__init__.py:256] Automatically detected platform tpu.
-INFO 03-13 17:14:17 [core.py:51] Initializing a V1 LLM engine (v0.7.4.dev339+ga21076ed.d20250312) with config: model='mistralai/Mixtral-8x7B-Instruct-v0.1', speculative_config=None, tokenizer='mistralai/Mixtral-8x7B-Instruct-v0.1', skip_tokenizer_init=False, tokenizer_mode=auto, revision=None, override_neuron_config=None, tokenizer_revision=None, trust_remote_code=True, dtype=torch.bfloat16, max_seq_len=4096, download_dir='/dev/shm', load_format=auto, tensor_parallel_size=4, pipeline_parallel_size=1, disable_custom_all_reduce=False, quantization=None, enforce_eager=False, kv_cache_dtype=auto,  device_config=None, decoding_config=DecodingConfig(guided_decoding_backend='xgrammar', reasoning_backend=None), observability_config=ObservabilityConfig(show_hidden_metrics=False, otlp_traces_endpoint=None, collect_model_forward_time=False, collect_model_execute_time=False), seed=42, served_model_name=mistralai/Mixtral-8x7B-Instruct-v0.1, num_scheduler_steps=1, multi_step_stream_outputs=True, enable_prefix_caching=False, chunked_prefill_enabled=True, use_async_output_proc=False, disable_mm_preprocessor_cache=False, mm_processor_kwargs=None, pooler_config=None, compilation_config={"level":2,"backend":"openxla","custom_ops":["none"],"splitting_ops":["vllm.unified_attention","vllm.unified_attention_with_output"],"use_inductor":true,"compile_sizes":[],"use_cudagraph":true,"cudagraph_num_of_warmups":1,"cudagraph_capture_sizes":[512,504,496,488,480,472,464,456,448,440,432,424,416,408,400,392,384,376,368,360,352,344,336,328,320,312,304,296,288,280,272,264,256,248,240,232,224,216,208,200,192,184,176,168,160,152,144,136,128,120,112,104,96,88,80,72,64,56,48,40,32,24,16,8,4,2,1],"max_capture_size":512}
-2025-03-13 17:14:18,937	INFO worker.py:1832 -- Started a local Ray instance. View the dashboard at [1m[32m127.0.0.1:8265 [39m[22m
-INFO 03-13 17:14:20 [ray_distributed_executor.py:176] use_ray_spmd_worker: True
-hosseins: _init_workers_ray() len(bundle_indices)=4
-[36m(pid=432650)[0m INFO 03-13 17:14:23 [__init__.py:256] Automatically detected platform tpu.
-hosseins: _init_workers_ray() worker_ips=['10.130.0.78', '10.130.0.78', '10.130.0.78', '10.130.0.78']
-hosseins: _init_workers_ray() worker_metadata=[RayWorkerMetaData(worker=Actor(RayWorkerWrapper, 94ddc336358c4b4646fd9f1c01000000), created_rank=0, adjusted_rank=-1, ip='10.130.0.78'), RayWorkerMetaData(worker=Actor(RayWorkerWrapper, 98f1bf3288ac6230c8b995f501000000), created_rank=1, adjusted_rank=-1, ip='10.130.0.78'), RayWorkerMetaData(worker=Actor(RayWorkerWrapper, 2e42a52a03dd2df57a166c2601000000), created_rank=2, adjusted_rank=-1, ip='10.130.0.78'), RayWorkerMetaData(worker=Actor(RayWorkerWrapper, 91f79d5eafd8f1187abd864901000000), created_rank=3, adjusted_rank=-1, ip='10.130.0.78')]
-hosseins: _init_workers_ray() self.workers=[Actor(RayWorkerWrapper, 94ddc336358c4b4646fd9f1c01000000), Actor(RayWorkerWrapper, 98f1bf3288ac6230c8b995f501000000), Actor(RayWorkerWrapper, 2e42a52a03dd2df57a166c2601000000), Actor(RayWorkerWrapper, 91f79d5eafd8f1187abd864901000000)]
-hosseins: _init_workers_ray() len(self.workers)=4
-hosseins: _init_workers_ray() node_gpus=defaultdict(<class 'list'>, {'38c168ad8c0fee208dae8a0ddad88d6ea1fddfbcca76cd853ac7d908': [0, 1, 2, 3]})
-hosseins: _init_workers_ray() len(node_workers)=1
-hosseins: _init_workers_ray() all_args_to_update_environment_variables=[{'TPU_VISIBLE_CHIPS': '0,1,2,3'}, {'TPU_VISIBLE_CHIPS': '0,1,2,3'}, {'TPU_VISIBLE_CHIPS': '0,1,2,3'}, {'TPU_VISIBLE_CHIPS': '0,1,2,3'}]
-INFO 03-13 17:14:24 [ray_distributed_executor.py:358] non_carry_over_env_vars from config: set()
-INFO 03-13 17:14:24 [ray_distributed_executor.py:360] Copying the following environment variables to workers: ['LD_LIBRARY_PATH', 'VLLM_USE_RAY_SPMD_WORKER', 'VLLM_USE_RAY_COMPILED_DAG', 'VLLM_USE_RAY_COMPILED_DAG_NCCL_CHANNEL', 'VLLM_WORKER_MULTIPROC_METHOD', 'VLLM_USE_V1']
-INFO 03-13 17:14:24 [ray_distributed_executor.py:363] If certain env vars should NOT be copied to workers, add them to /home/hosseins/.config/vllm/ray_non_carry_over_env_vars.json file
-[36m(RayWorkerWrapper pid=432649)[0m Loading safetensors checkpoint shards:   0% Completed | 0/19 [00:00<?, ?it/s]
-[36m(RayWorkerWrapper pid=432649)[0m Loading safetensors checkpoint shards:   5% Completed | 1/19 [00:00<00:11,  1.63it/s]
-[36m(RayWorkerWrapper pid=432649)[0m Loading safetensors checkpoint shards:  11% Completed | 2/19 [00:01<00:10,  1.60it/s]
-[36m(RayWorkerWrapper pid=432649)[0m Loading safetensors checkpoint shards:  16% Completed | 3/19 [00:01<00:09,  1.71it/s]
-[36m(RayWorkerWrapper pid=432649)[0m Loading safetensors checkpoint shards:  21% Completed | 4/19 [00:02<00:08,  1.77it/s]
-[36m(RayWorkerWrapper pid=432649)[0m Loading safetensors checkpoint shards:  26% Completed | 5/19 [00:02<00:07,  1.91it/s]
-[36m(RayWorkerWrapper pid=432649)[0m Loading safetensors checkpoint shards:  32% Completed | 6/19 [00:03<00:06,  2.01it/s]
-[36m(RayWorkerWrapper pid=432649)[0m Loading safetensors checkpoint shards:  37% Completed | 7/19 [00:03<00:05,  2.12it/s]
-[36m(RayWorkerWrapper pid=432649)[0m Loading safetensors checkpoint shards:  42% Completed | 8/19 [00:04<00:05,  2.17it/s]
-[36m(RayWorkerWrapper pid=432649)[0m Loading safetensors checkpoint shards:  47% Completed | 9/19 [00:04<00:04,  2.21it/s]
-[36m(RayWorkerWrapper pid=432649)[0m Loading safetensors checkpoint shards:  53% Completed | 10/19 [00:04<00:04,  2.24it/s]
-[36m(RayWorkerWrapper pid=432649)[0m Loading safetensors checkpoint shards:  58% Completed | 11/19 [00:05<00:03,  2.25it/s]
-[36m(RayWorkerWrapper pid=432649)[0m Loading safetensors checkpoint shards:  63% Completed | 12/19 [00:05<00:03,  2.27it/s]
-[36m(RayWorkerWrapper pid=432649)[0m Loading safetensors checkpoint shards:  68% Completed | 13/19 [00:06<00:02,  2.33it/s]
-[36m(RayWorkerWrapper pid=432649)[0m Loading safetensors checkpoint shards:  74% Completed | 14/19 [00:06<00:02,  2.34it/s]
-[36m(RayWorkerWrapper pid=432649)[0m Loading safetensors checkpoint shards:  79% Completed | 15/19 [00:07<00:01,  2.39it/s]
-[36m(RayWorkerWrapper pid=432649)[0m Loading safetensors checkpoint shards:  84% Completed | 16/19 [00:07<00:01,  2.41it/s]
-[36m(RayWorkerWrapper pid=432649)[0m Loading safetensors checkpoint shards:  89% Completed | 17/19 [00:07<00:00,  2.50it/s]
-[36m(RayWorkerWrapper pid=432649)[0m Loading safetensors checkpoint shards:  95% Completed | 18/19 [00:08<00:00,  2.53it/s]
-[36m(RayWorkerWrapper pid=432649)[0m Loading safetensors checkpoint shards: 100% Completed | 19/19 [00:08<00:00,  2.55it/s]
-[36m(RayWorkerWrapper pid=432649)[0m Loading safetensors checkpoint shards: 100% Completed | 19/19 [00:08<00:00,  2.21it/s]
-[36m(RayWorkerWrapper pid=432649)[0m 
-[36m(RayWorkerWrapper pid=432650)[0m hosseins: get_node_and_gpu_ids() device_key='TPU'
-[36m(RayWorkerWrapper pid=432650)[0m hosseins: get_node_and_gpu_ids() node_id='38c168ad8c0fee208dae8a0ddad88d6ea1fddfbcca76cd853ac7d908'
-[36m(RayWorkerWrapper pid=432650)[0m hosseins: get_node_and_gpu_ids() gpu_ids=['1']
-[36m(RayWorkerWrapper pid=432650)[0m WARNING 03-13 17:14:24 [utils.py:577] Overwriting environment variable TPU_VISIBLE_CHIPS from '1' to '0,1,2,3'
-[36m(RayWorkerWrapper pid=432650)[0m WARNING 03-13 17:14:24 [utils.py:577] Overwriting environment variable LD_LIBRARY_PATH from '/home/hosseins/miniconda3/envs/vllm-v1/lib/python3.10/site-packages/cv2/../../lib64:/home/hosseins/miniconda3/envs/vllm-v1/lib/python3.10/site-packages/cv2/../../lib64:/home/hosseins/miniconda3/envs/vllm-v1/lib/python3.10/site-packages/cv2/../../lib64:' to '/home/hosseins/miniconda3/envs/vllm-v1/lib/python3.10/site-packages/cv2/../../lib64:/home/hosseins/miniconda3/envs/vllm-v1/lib/python3.10/site-packages/cv2/../../lib64:'
-[36m(RayWorkerWrapper pid=432650)[0m hosseins: init_worker() self.vllm_config.parallel_config.worker_cls='vllm.v1.worker.tpu_worker.TPUWorker'
-[36m(RayWorkerWrapper pid=432650)[0m hosseins: initialize_model_parallel() world_size=4
-[36m(RayWorkerWrapper pid=432650)[0m hosseins: initialize_model_parallel() all_ranks=tensor([[[0, 1, 2, 3]]])
-[36m(RayWorkerWrapper pid=432650)[0m INFO 03-13 17:14:33 [parallel_state.py:950] rank 1 in world size 4 is assigned as DP rank 0, PP rank 0, TP rank 1
-[36m(RayWorkerWrapper pid=432650)[0m WARNING 03-13 17:14:33 [tpu.py:116] Pin memory is not supported on TPU.
-[36m(pid=432649)[0m INFO 03-13 17:14:23 [__init__.py:256] Automatically detected platform tpu.[32m [repeated 3x across cluster] (Ray deduplicates logs by default. Set RAY_DEDUP_LOGS=0 to disable log deduplication, or see https://docs.ray.io/en/master/ray-observability/user-guides/configure-logging.html#log-deduplication for more options.)[0m
-[36m(RayWorkerWrapper pid=432649)[0m hosseins: get_node_and_gpu_ids() device_key='TPU'[32m [repeated 3x across cluster][0m
-[36m(RayWorkerWrapper pid=432649)[0m hosseins: get_node_and_gpu_ids() gpu_ids=['0'][32m [repeated 6x across cluster][0m
-[36m(RayWorkerWrapper pid=432649)[0m WARNING 03-13 17:14:24 [utils.py:577] Overwriting environment variable TPU_VISIBLE_CHIPS from '0' to '0,1,2,3'[32m [repeated 3x across cluster][0m
-[36m(RayWorkerWrapper pid=432649)[0m WARNING 03-13 17:14:24 [utils.py:577] Overwriting environment variable LD_LIBRARY_PATH from '/home/hosseins/miniconda3/envs/vllm-v1/lib/python3.10/site-packages/cv2/../../lib64:/home/hosseins/miniconda3/envs/vllm-v1/lib/python3.10/site-packages/cv2/../../lib64:/home/hosseins/miniconda3/envs/vllm-v1/lib/python3.10/site-packages/cv2/../../lib64:' to '/home/hosseins/miniconda3/envs/vllm-v1/lib/python3.10/site-packages/cv2/../../lib64:/home/hosseins/miniconda3/envs/vllm-v1/lib/python3.10/site-packages/cv2/../../lib64:'[32m [repeated 3x across cluster][0m
-[36m(RayWorkerWrapper pid=432649)[0m hosseins: init_worker() self.vllm_config.parallel_config.worker_cls='vllm.v1.worker.tpu_worker.TPUWorker'[32m [repeated 3x across cluster][0m
-[36m(RayWorkerWrapper pid=432649)[0m hosseins: initialize_model_parallel() all_ranks=tensor([[[0, 1, 2, 3]]])[32m [repeated 6x across cluster][0m
-[36m(RayWorkerWrapper pid=432638)[0m hosseins: get_model_loader() load_config.load_format=<LoadFormat.AUTO: 'auto'>
-[36m(RayWorkerWrapper pid=432649)[0m INFO 03-13 17:14:33 [shm_broadcast.py:258] vLLM message queue communication handle: Handle(local_reader_ranks=[1, 2, 3], buffer_handle=(3, 4194304, 6, 'psm_ea171b16'), local_subscribe_addr='ipc:///dev/shm/ray/109bda04-f0b1-4537-8af1-527bcf5514c2', remote_subscribe_addr=None, remote_addr_ipv6=False)
-[36m(RayWorkerWrapper pid=432650)[0m INFO 03-13 17:14:34 [tpu.py:39] Cannot use None backend on TPU.
-[36m(RayWorkerWrapper pid=432650)[0m INFO 03-13 17:14:34 [tpu.py:42] Using Pallas V1 backend.
-[36m(RayWorkerWrapper pid=432650)[0m WARNING 03-13 17:14:34 [topk_topp_sampler.py:46] FlashInfer is not available. Falling back to the PyTorch-native implementation of top-p & top-k sampling. For the best performance, please install FlashInfer.
-[36m(RayWorkerWrapper pid=432650)[0m INFO 03-13 17:14:34 [weight_utils.py:257] Using model weights format ['*.safetensors']
-[36m(RayWorkerWrapper pid=432649)[0m INFO 03-13 17:14:43 [loader.py:429] Loading weights took 8.65 seconds
-[36m(RayWorkerWrapper pid=432649)[0m INFO 03-13 17:14:33 [parallel_state.py:950] rank 0 in world size 4 is assigned as DP rank 0, PP rank 0, TP rank 0[32m [repeated 3x across cluster][0m
-[36m(RayWorkerWrapper pid=432649)[0m WARNING 03-13 17:14:33 [tpu.py:116] Pin memory is not supported on TPU.[32m [repeated 3x across cluster][0m
-[36m(RayWorkerWrapper pid=432650)[0m hosseins: get_model_loader() load_config.load_format=<LoadFormat.AUTO: 'auto'>[32m [repeated 3x across cluster][0m
-[36m(RayWorkerWrapper pid=432649)[0m INFO 03-13 17:14:34 [tpu.py:39] Cannot use None backend on TPU.[32m [repeated 3x across cluster][0m
-[36m(RayWorkerWrapper pid=432649)[0m INFO 03-13 17:14:34 [tpu.py:42] Using Pallas V1 backend.[32m [repeated 3x across cluster][0m
-[36m(RayWorkerWrapper pid=432649)[0m WARNING 03-13 17:14:34 [topk_topp_sampler.py:46] FlashInfer is not available. Falling back to the PyTorch-native implementation of top-p & top-k sampling. For the best performance, please install FlashInfer.[32m [repeated 3x across cluster][0m
-[36m(RayWorkerWrapper pid=432649)[0m INFO 03-13 17:14:34 [weight_utils.py:257] Using model weights format ['*.safetensors'][32m [repeated 3x across cluster][0m
-ERROR 03-13 17:14:44 [core.py:332] EngineCore hit an exception: Traceback (most recent call last):
-ERROR 03-13 17:14:44 [core.py:332]   File "/home/hosseins/vllm-v1/vllm/v1/engine/core.py", line 324, in run_engine_core
-ERROR 03-13 17:14:44 [core.py:332]     engine_core = EngineCoreProc(*args, **kwargs)
-ERROR 03-13 17:14:44 [core.py:332]   File "/home/hosseins/vllm-v1/vllm/v1/engine/core.py", line 279, in __init__
-ERROR 03-13 17:14:44 [core.py:332]     super().__init__(vllm_config, executor_class, log_stats)
-ERROR 03-13 17:14:44 [core.py:332]   File "/home/hosseins/vllm-v1/vllm/v1/engine/core.py", line 57, in __init__
-ERROR 03-13 17:14:44 [core.py:332]     self.model_executor = executor_class(vllm_config)
-ERROR 03-13 17:14:44 [core.py:332]   File "/home/hosseins/vllm-v1/vllm/executor/executor_base.py", line 271, in __init__
-ERROR 03-13 17:14:44 [core.py:332]     super().__init__(*args, **kwargs)
-ERROR 03-13 17:14:44 [core.py:332]   File "/home/hosseins/vllm-v1/vllm/executor/executor_base.py", line 52, in __init__
-ERROR 03-13 17:14:44 [core.py:332]     self._init_executor()
-ERROR 03-13 17:14:44 [core.py:332]   File "/home/hosseins/vllm-v1/vllm/executor/ray_distributed_executor.py", line 114, in _init_executor
-ERROR 03-13 17:14:44 [core.py:332]     self._init_workers_ray(placement_group)
-ERROR 03-13 17:14:44 [core.py:332]   File "/home/hosseins/vllm-v1/vllm/executor/ray_distributed_executor.py", line 402, in _init_workers_ray
-ERROR 03-13 17:14:44 [core.py:332]     self._run_workers("load_model",
-ERROR 03-13 17:14:44 [core.py:332]   File "/home/hosseins/vllm-v1/vllm/executor/ray_distributed_executor.py", line 532, in _run_workers
-ERROR 03-13 17:14:44 [core.py:332]     ray_worker_outputs = ray.get(ray_worker_outputs)
-ERROR 03-13 17:14:44 [core.py:332]   File "/home/hosseins/miniconda3/envs/vllm-v1/lib/python3.10/site-packages/ray/_private/auto_init_hook.py", line 21, in auto_init_wrapper
-ERROR 03-13 17:14:44 [core.py:332]     return fn(*args, **kwargs)
-ERROR 03-13 17:14:44 [core.py:332]   File "/home/hosseins/miniconda3/envs/vllm-v1/lib/python3.10/site-packages/ray/_private/client_mode_hook.py", line 103, in wrapper
-ERROR 03-13 17:14:44 [core.py:332]     return func(*args, **kwargs)
-ERROR 03-13 17:14:44 [core.py:332]   File "/home/hosseins/miniconda3/envs/vllm-v1/lib/python3.10/site-packages/ray/_private/worker.py", line 2771, in get
-ERROR 03-13 17:14:44 [core.py:332]     values, debugger_breakpoint = worker.get_objects(object_refs, timeout=timeout)
-ERROR 03-13 17:14:44 [core.py:332]   File "/home/hosseins/miniconda3/envs/vllm-v1/lib/python3.10/site-packages/ray/_private/worker.py", line 919, in get_objects
-ERROR 03-13 17:14:44 [core.py:332]     raise value.as_instanceof_cause()
-ERROR 03-13 17:14:44 [core.py:332] ray.exceptions.RayTaskError(RuntimeError): [36mray::RayWorkerWrapper.execute_method()[39m (pid=432649, ip=10.130.0.78, actor_id=94ddc336358c4b4646fd9f1c01000000, repr=<vllm.executor.ray_utils.RayWorkerWrapper object at 0x78768be60d00>)
-ERROR 03-13 17:14:44 [core.py:332]   File "/home/hosseins/vllm-v1/vllm/worker/worker_base.py", line 621, in execute_method
-ERROR 03-13 17:14:44 [core.py:332]     raise e
-ERROR 03-13 17:14:44 [core.py:332]   File "/home/hosseins/vllm-v1/vllm/worker/worker_base.py", line 612, in execute_method
-ERROR 03-13 17:14:44 [core.py:332]     return run_method(self, method, args, kwargs)
-ERROR 03-13 17:14:44 [core.py:332]   File "/home/hosseins/vllm-v1/vllm/utils.py", line 2241, in run_method
-ERROR 03-13 17:14:44 [core.py:332]     return func(*args, **kwargs)
-ERROR 03-13 17:14:44 [core.py:332]   File "/home/hosseins/vllm-v1/vllm/v1/worker/tpu_worker.py", line 184, in load_model
-ERROR 03-13 17:14:44 [core.py:332]     self.model_runner.load_model()
-ERROR 03-13 17:14:44 [core.py:332]   File "/home/hosseins/vllm-v1/vllm/v1/worker/tpu_model_runner.py", line 677, in load_model
-ERROR 03-13 17:14:44 [core.py:332]     xm.wait_device_ops()
-ERROR 03-13 17:14:44 [core.py:332]   File "/home/hosseins/miniconda3/envs/vllm-v1/lib/python3.10/site-packages/torch_xla/core/xla_model.py", line 1129, in wait_device_ops
-ERROR 03-13 17:14:44 [core.py:332]     torch_xla._XLAC._xla_wait_device_ops(devices=devices)
-ERROR 03-13 17:14:44 [core.py:332] RuntimeError: Bad StatusOr access: RESOURCE_EXHAUSTED: Error allocating device buffer: Attempting to allocate 448.00M. That was not possible. There are 289.41M free.; (0x1x0_HBM0)
-ERROR 03-13 17:14:44 [core.py:332] 
-INFO 03-13 17:14:44 [ray_distributed_executor.py:127] Shutting down Ray distributed executor. If you see error log from logging.cc regarding SIGTERM received, please ignore because this is the expected termination process in Ray.
-CRITICAL 03-13 17:14:44 [core_client.py:260] Got fatal signal from worker processes, shutting down. See stack trace above for root cause issue.
