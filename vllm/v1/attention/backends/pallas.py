@@ -230,7 +230,7 @@ class PallasAttentionBackendImpl(AttentionImpl):
 
         # print(f"hosseins: PallasAttentionBackend.forward() 0 {get_shard_spec(output)=} {output.shape=}")
         output_shape = output.shape
-        new_output = disable_manual_sharding_wrapper(output, (None, 'axis', None), torch.Size((output_shape[0], output_shape[1] * 4, output_shape[2])))
+        new_output = disable_manual_sharding_wrapper(output, (None, 'axis', None), torch.Size((output_shape[0], output_shape[1] * len(get_device_ids()), output_shape[2])))
         # new_output = output
         # print(f"hosseins: PallasAttentionBackend.forward() 0 {get_shard_spec(new_output)=} {new_output.shape=}")
         true_out = new_output.reshape(num_tokens, hidden_size)
