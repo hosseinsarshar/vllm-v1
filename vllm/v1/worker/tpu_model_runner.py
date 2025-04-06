@@ -359,11 +359,11 @@ class TPUModelRunner:
         block_size = self.vllm_config.cache_config.block_size
         kv_cache_spec: dict[str, KVCacheSpec] = {}
         for layer_name, attn_module in forward_ctx.items():
-            # print(f"hosseins: {layer_name=}")
-            # print(f"hosseins: {block_size=}")
-            # print(f"hosseins: {attn_module.num_kv_heads=}")
-            # print(f"hosseins: {attn_module.head_size=}")
-            # print(f"hosseins: {attn_module.dtype=}")
+            # # print(f"hosseins: {layer_name=}")
+            # # print(f"hosseins: {block_size=}")
+            # # print(f"hosseins: {attn_module.num_kv_heads=}")
+            # # print(f"hosseins: {attn_module.head_size=}")
+            # # print(f"hosseins: {attn_module.dtype=}")
             assert isinstance(attn_module, Attention)
             if attn_module.attn_type == AttentionType.DECODER:
                 if attn_module.sliding_window is not None:
@@ -620,41 +620,41 @@ class TPUModelRunner:
         intermediate_tensors: Optional[IntermediateTensors] = None,
     ) -> ModelRunnerOutput:
         # Update cached state
-        print("hosseins: TPUModelRunner.execute_model() starts")
-        with xp.Trace("TPUModelRunner.execute_model.part1()"):
-            self._update_states(scheduler_output)
-            if not scheduler_output.total_num_scheduled_tokens:
-                # Return empty ModelRunnerOuptut if there's no work to do.
-                return EMPTY_MODEL_RUNNER_OUTPUT
+        # print("hosseins: TPUModelRunner.execute_model() starts")
+        # with xp.Trace("TPUModelRunner.execute_model.part1()"):
+        self._update_states(scheduler_output)
+        if not scheduler_output.total_num_scheduled_tokens:
+            # Return empty ModelRunnerOuptut if there's no work to do.
+            return EMPTY_MODEL_RUNNER_OUTPUT
 
-            if self.is_multimodal_model:
-                # Run the multimodal encoder if any.
-                self._execute_encoder(scheduler_output)
-                encoder_outputs = self._gather_encoder_outputs(scheduler_output)
-            else:
-                encoder_outputs = []
+        if self.is_multimodal_model:
+            # Run the multimodal encoder if any.
+            self._execute_encoder(scheduler_output)
+            encoder_outputs = self._gather_encoder_outputs(scheduler_output)
+        else:
+            encoder_outputs = []
 
-        with xp.Trace("TPUModelRunner.execute_model.prepare_input()"):
+        # with xp.Trace("TPUModelRunner.execute_model.prepare_input()"):
         # Prepare inputs
-            attn_metadata, logits_indices = self._prepare_inputs(scheduler_output)
-            if self.is_multimodal_model:
-                # NOTE(woosuk): To unify token ids and soft tokens (vision
-                # embeddings), we always use embeddings (rather than token ids)
-                # as input to the multimodal model, even when the input is text.
-                if encoder_outputs:
-                    inputs_embeds = self.model.get_input_embeddings(
-                        self.input_ids, encoder_outputs)
-                else:
-                    inputs_embeds = self.model.get_input_embeddings(self.input_ids)
-                input_ids = None
+        attn_metadata, logits_indices = self._prepare_inputs(scheduler_output)
+        if self.is_multimodal_model:
+            # NOTE(woosuk): To unify token ids and soft tokens (vision
+            # embeddings), we always use embeddings (rather than token ids)
+            # as input to the multimodal model, even when the input is text.
+            if encoder_outputs:
+                inputs_embeds = self.model.get_input_embeddings(
+                    self.input_ids, encoder_outputs)
             else:
-                # For text-only models, we use token ids as input.
-                # While it is possible to use embeddings as input just like the
-                # multimodal models, it is not desirable for performance since
-                # then the embedding layer is not included in the CUDA graph.
-                input_ids = self.input_ids
-                inputs_embeds = None
-            num_reqs = self.input_batch.num_reqs
+                inputs_embeds = self.model.get_input_embeddings(self.input_ids)
+            input_ids = None
+        else:
+            # For text-only models, we use token ids as input.
+            # While it is possible to use embeddings as input just like the
+            # multimodal models, it is not desirable for performance since
+            # then the embedding layer is not included in the CUDA graph.
+            input_ids = self.input_ids
+            inputs_embeds = None
+        num_reqs = self.input_batch.num_reqs
         # NOTE (NickLucche) here we sync with TPU: sampling params tensors
         # are copied to device in chunks of pre-compiled padded shape to
         # avoid recompilations.
@@ -676,84 +676,84 @@ class TPUModelRunner:
 
         # Update the cache state concurrently. Code above will not block until
         # we use `selected_token_ids`. Add mark_step if post-processing changes
-        with xp.Trace("TPUModelRunner.execute_model.update_cache()"):
-            request_seq_lens: list[tuple[int, CachedRequestState, int]] = []
-            discard_sampled_tokens_req_indices = []
-            for i, req_id in zip(range(num_reqs), self.input_batch.req_ids):
-                assert req_id is not None
-                req_state = self.requests[req_id]
-                seq_len = (req_state.num_computed_tokens +
-                        scheduler_output.num_scheduled_tokens[req_id])
-                if seq_len >= req_state.num_tokens:
-                    request_seq_lens.append((i, req_state, seq_len))
-                else:
-                    # Ignore the sampled token from the partial request.
-                    # Rewind the generator state as if the token was not sampled.
-                    generator = self.input_batch.generators.get(i)
-                    if generator is not None:
-                        # This relies on cuda-specific torch-internal impl details
-                        generator.set_offset(generator.get_offset() - 4)
-
-                    # Record the index of the request that should not be sampled,
-                    # so that we could clear the sampled tokens before returning.
-                    discard_sampled_tokens_req_indices.append(i)
-
-        with xp.Trace("TPUModelRunner.execute_model.last_part()"):
-            assert all(
-                req_id is not None for req_id in
-                self.input_batch.req_ids[:num_reqs]), "req_ids contains None"
-            req_ids = cast(list[str], self.input_batch.req_ids[:num_reqs])
-
-            prompt_logprobs_dict: dict[str, Optional[LogprobsTensors]] = {}
-            for req_id in self.input_batch.req_ids[:num_reqs]:
-                prompt_logprobs_dict[req_id] = None
-
-            max_gen_len = selected_token_ids.shape[-1]
-            if max_gen_len == 1:
-                valid_sampled_token_ids = selected_token_ids.tolist()
-
-                # Mask out the sampled tokens that should not be sampled.
-                # TODO: Keep in sync with gpu_model_runner.py, in particular
-                #       the "else" case here
-                for i in discard_sampled_tokens_req_indices:
-                    valid_sampled_token_ids[i].clear()
-
-                # Append sampled tokens
-                for i, req_state, seq_len in request_seq_lens:
-                    token_id = valid_sampled_token_ids[i][0]
-                    self.input_batch.token_ids_cpu[i, seq_len] = token_id
-                    req_state.output_token_ids.append(token_id)
-                    self.input_batch.num_tokens[i] += 1
-
+        # with xp.Trace("TPUModelRunner.execute_model.update_cache()"):
+        request_seq_lens: list[tuple[int, CachedRequestState, int]] = []
+        discard_sampled_tokens_req_indices = []
+        for i, req_id in zip(range(num_reqs), self.input_batch.req_ids):
+            assert req_id is not None
+            req_state = self.requests[req_id]
+            seq_len = (req_state.num_computed_tokens +
+                    scheduler_output.num_scheduled_tokens[req_id])
+            if seq_len >= req_state.num_tokens:
+                request_seq_lens.append((i, req_state, seq_len))
             else:
-                valid_mask = selected_token_ids != INVALID_TOKEN_ID
-                gen_lens = valid_mask.sum(dim=1).tolist()
-                valid_sampled_token_ids = [
-                    seq.tolist()
-                    for seq in selected_token_ids[valid_mask].split(gen_lens)
-                ]
-                self.input_batch.num_tokens[:num_reqs] += gen_lens
-                for i, req_state, seq_len in request_seq_lens:
-                    target_slice = slice(seq_len - gen_lens[i] + 1, seq_len + 1)
-                    self.input_batch.token_ids_cpu[
-                        i, target_slice] = valid_sampled_token_ids[i]
-                    req_state.output_token_ids.extend(valid_sampled_token_ids[i])
+                # Ignore the sampled token from the partial request.
+                # Rewind the generator state as if the token was not sampled.
+                generator = self.input_batch.generators.get(i)
+                if generator is not None:
+                    # This relies on cuda-specific torch-internal impl details
+                    generator.set_offset(generator.get_offset() - 4)
 
-            model_runner_output = ModelRunnerOutput(
-                req_ids=req_ids,
-                req_id_to_index=self.input_batch.req_id_to_index,
-                sampled_token_ids=valid_sampled_token_ids,
-                spec_token_ids=None,
-                logprobs=None,
-                prompt_logprobs_dict=prompt_logprobs_dict,
-            )
+                # Record the index of the request that should not be sampled,
+                # so that we could clear the sampled tokens before returning.
+                discard_sampled_tokens_req_indices.append(i)
 
-            # Check there are no new graphs compiled - all the graphs should be
-            # captured and compiled during warm up.
-            self._verify_num_xla_graphs("execute_model")
-            print("hosseins: TPUModelRunner.execute_model() ends")
+        # with xp.Trace("TPUModelRunner.execute_model.last_part()"):
+        assert all(
+            req_id is not None for req_id in
+            self.input_batch.req_ids[:num_reqs]), "req_ids contains None"
+        req_ids = cast(list[str], self.input_batch.req_ids[:num_reqs])
 
-            return model_runner_output
+        prompt_logprobs_dict: dict[str, Optional[LogprobsTensors]] = {}
+        for req_id in self.input_batch.req_ids[:num_reqs]:
+            prompt_logprobs_dict[req_id] = None
+
+        max_gen_len = selected_token_ids.shape[-1]
+        if max_gen_len == 1:
+            valid_sampled_token_ids = selected_token_ids.tolist()
+
+            # Mask out the sampled tokens that should not be sampled.
+            # TODO: Keep in sync with gpu_model_runner.py, in particular
+            #       the "else" case here
+            for i in discard_sampled_tokens_req_indices:
+                valid_sampled_token_ids[i].clear()
+
+            # Append sampled tokens
+            for i, req_state, seq_len in request_seq_lens:
+                token_id = valid_sampled_token_ids[i][0]
+                self.input_batch.token_ids_cpu[i, seq_len] = token_id
+                req_state.output_token_ids.append(token_id)
+                self.input_batch.num_tokens[i] += 1
+
+        else:
+            valid_mask = selected_token_ids != INVALID_TOKEN_ID
+            gen_lens = valid_mask.sum(dim=1).tolist()
+            valid_sampled_token_ids = [
+                seq.tolist()
+                for seq in selected_token_ids[valid_mask].split(gen_lens)
+            ]
+            self.input_batch.num_tokens[:num_reqs] += gen_lens
+            for i, req_state, seq_len in request_seq_lens:
+                target_slice = slice(seq_len - gen_lens[i] + 1, seq_len + 1)
+                self.input_batch.token_ids_cpu[
+                    i, target_slice] = valid_sampled_token_ids[i]
+                req_state.output_token_ids.extend(valid_sampled_token_ids[i])
+
+        model_runner_output = ModelRunnerOutput(
+            req_ids=req_ids,
+            req_id_to_index=self.input_batch.req_id_to_index,
+            sampled_token_ids=valid_sampled_token_ids,
+            spec_token_ids=None,
+            logprobs=None,
+            prompt_logprobs_dict=prompt_logprobs_dict,
+        )
+
+        # Check there are no new graphs compiled - all the graphs should be
+        # captured and compiled during warm up.
+        self._verify_num_xla_graphs("execute_model")
+        # print("hosseins: TPUModelRunner.execute_model() ends")
+
+        return model_runner_output
 
     def load_model(self) -> None:
         self.device = self.device_config.device
@@ -777,7 +777,7 @@ class TPUModelRunner:
         xm.mark_step()
         xm.wait_device_ops()
         model = ModelWrapperV1(model)
-        print("hosseins: load_model() model is loaded")
+        # print("hosseins: load_model() model is loaded")
         self.model = model
 
         # hosseins: torch.compile
@@ -788,61 +788,61 @@ class TPUModelRunner:
 
     @torch.no_grad()
     def _dummy_run(self, kv_caches, num_tokens: int) -> None:
-        print("hosseins: TPUModelRunner._dummy_run()")
-        with xp.Trace("TPUModelRunner._dummy_run()"):
-            if self.is_multimodal_model:
-                input_ids = None
-                inputs_embeds = torch.zeros((num_tokens, self.hidden_size),
-                                            dtype=self.dtype,
-                                            device=self.device)
-            else:
-                input_ids = torch.zeros((num_tokens),
-                                        dtype=torch.int32,
+        # print("hosseins: TPUModelRunner._dummy_run()")
+        # with xp.Trace("TPUModelRunner._dummy_run()"):
+        if self.is_multimodal_model:
+            input_ids = None
+            inputs_embeds = torch.zeros((num_tokens, self.hidden_size),
+                                        dtype=self.dtype,
                                         device=self.device)
-                inputs_embeds = None
-            actual_num_reqs = min(num_tokens, self.max_num_reqs)
-            position_ids = torch.zeros(num_tokens,
+        else:
+            input_ids = torch.zeros((num_tokens),
                                     dtype=torch.int32,
                                     device=self.device)
-            slot_mapping = torch.zeros(num_tokens,
-                                    dtype=torch.int64,
-                                    device=self.device)
-            block_tables = torch.zeros(
-                (self.max_num_reqs, self.block_table_cpu.shape[1]),
-                dtype=torch.int32,
-                device=self.device)
-            query_lens = [1] * self.max_num_reqs
-            query_start_loc = torch.cumsum(torch.tensor([0] + query_lens,
-                                                        dtype=torch.int32),
-                                        dim=0,
-                                        dtype=torch.int32).to(self.device)
-            context_lens = torch.ones((self.max_num_reqs, ),
-                                    dtype=torch.int32,
-                                    device=self.device)
-            num_seqs = torch.tensor([actual_num_reqs],
-                                    dtype=torch.int32,
-                                    device=self.device)
-            attn_metadata = PallasMetadata(
-                slot_mapping=slot_mapping,
-                block_tables=block_tables,
-                context_lens=context_lens,
-                query_start_loc=query_start_loc,
-                num_seqs=num_seqs,
-            )
+            inputs_embeds = None
+        actual_num_reqs = min(num_tokens, self.max_num_reqs)
+        position_ids = torch.zeros(num_tokens,
+                                dtype=torch.int32,
+                                device=self.device)
+        slot_mapping = torch.zeros(num_tokens,
+                                dtype=torch.int64,
+                                device=self.device)
+        block_tables = torch.zeros(
+            (self.max_num_reqs, self.block_table_cpu.shape[1]),
+            dtype=torch.int32,
+            device=self.device)
+        query_lens = [1] * self.max_num_reqs
+        query_start_loc = torch.cumsum(torch.tensor([0] + query_lens,
+                                                    dtype=torch.int32),
+                                    dim=0,
+                                    dtype=torch.int32).to(self.device)
+        context_lens = torch.ones((self.max_num_reqs, ),
+                                dtype=torch.int32,
+                                device=self.device)
+        num_seqs = torch.tensor([actual_num_reqs],
+                                dtype=torch.int32,
+                                device=self.device)
+        attn_metadata = PallasMetadata(
+            slot_mapping=slot_mapping,
+            block_tables=block_tables,
+            context_lens=context_lens,
+            query_start_loc=query_start_loc,
+            num_seqs=num_seqs,
+        )
 
-            if self.is_multimodal_model:
-                torch._dynamo.mark_dynamic(inputs_embeds, 0)
-            else:
-                torch._dynamo.mark_dynamic(input_ids, 0)
-            torch._dynamo.mark_dynamic(position_ids, 0)
-            torch._dynamo.mark_dynamic(attn_metadata.slot_mapping, 0)
+        if self.is_multimodal_model:
+            torch._dynamo.mark_dynamic(inputs_embeds, 0)
+        else:
+            torch._dynamo.mark_dynamic(input_ids, 0)
+        torch._dynamo.mark_dynamic(position_ids, 0)
+        torch._dynamo.mark_dynamic(attn_metadata.slot_mapping, 0)
 
-            with set_forward_context(attn_metadata, self.vllm_config, 0):
-                out = self.model(input_ids=input_ids,
-                                positions=position_ids,
-                                kv_caches=kv_caches,
-                                inputs_embeds=inputs_embeds)
-            self._hidden_states_dtype = out.dtype
+        with set_forward_context(attn_metadata, self.vllm_config, 0):
+            out = self.model(input_ids=input_ids,
+                            positions=position_ids,
+                            kv_caches=kv_caches,
+                            inputs_embeds=inputs_embeds)
+        self._hidden_states_dtype = out.dtype
 
     def capture_model(self) -> None:
         """Compile the model."""
@@ -910,14 +910,14 @@ class TPUModelRunner:
                 "supported yet.")
 
         kv_caches: dict[str, torch.Tensor] = {}
-        print(f"hosseins: initialize_kv_cache() {kv_cache_config=}")
+        # print(f"hosseins: initialize_kv_cache() {kv_cache_config=}")
 
-        # print(f"hosseins: {len(kv_cache_config.kv_cache_spec)=}")
-        print(f"hosseins: {kv_cache_config.num_blocks=}")
-        print(f"hosseins: {len(kv_cache_config.tensors)=}")
-        # print(f"hosseins: {len(kv_cache_config.groups)=}")
+        # # print(f"hosseins: {len(kv_cache_config.kv_cache_spec)=}")
+        # print(f"hosseins: {kv_cache_config.num_blocks=}")
+        # print(f"hosseins: {len(kv_cache_config.tensors)=}")
+        # # print(f"hosseins: {len(kv_cache_config.groups)=}")
 
-        # print(f"hosseins: {len(kv_cache_config.kv_cache_spec.items())=}")
+        # # print(f"hosseins: {len(kv_cache_config.kv_cache_spec.items())=}")
 
         for kv_cache_group in kv_cache_config.kv_cache_groups:
             kv_cache_spec = kv_cache_group.kv_cache_spec
@@ -933,7 +933,7 @@ class TPUModelRunner:
 
 
 
-                    print(f"hosseins: [{kv_cache_shape=}]")
+                    # print(f"hosseins: [{kv_cache_shape=}]")
                     tpu_kv_cache = torch.zeros(kv_cache_shape,
                                                dtype=dtype,
                                                device=self.device)
@@ -942,13 +942,13 @@ class TPUModelRunner:
                 else:
                     raise NotImplementedError
                 
-                print(f"hosseins: ============================= {layer_name} =============================")
-                print(f"hosseins: {num_blocks=}")
-                print(f"hosseins: {kv_cache_spec=}")
-                # print(f"hosseins: {layer_spec.num_kv_heads=}")
-                # print(f"hosseins: {layer_spec.head_size=}")
+                # print(f"hosseins: ============================= {layer_name} =============================")
+                # print(f"hosseins: {num_blocks=}")
+                # print(f"hosseins: {kv_cache_spec=}")
+                # # print(f"hosseins: {layer_spec.num_kv_heads=}")
+                # # print(f"hosseins: {layer_spec.head_size=}")
 
-        print(f"hosseins: initialize_kv_cache() {kv_cache_config=}")
+        # print(f"hosseins: initialize_kv_cache() {kv_cache_config=}")
         bind_kv_cache(
             kv_caches,
             self.vllm_config.compilation_config.static_forward_context,
@@ -985,25 +985,25 @@ class ModelWrapperV1(nn.Module):
             inputs_embeds: The input embeddings of shape [num_tokens,
                 hidden_size]. It is used for multimodal models.
         """
-        print("hosseins: ModelWrapperV1.forward()")
-        print(f"hosseins: ModelWrapperV1 -> forward() 1 {get_shard_spec(input_ids)=}")
-        print(f"hosseins: ModelWrapperV1 -> forward() 1 {get_shard_spec(positions)=}")
-        # print(f"hosseins: ModelWrapperV1 -> forward() 1 {get_shard_spec(inputs_embeds)=}")
-        with xp.Trace("ModelWrapperV1.forward()"):
-            assert self.model is not None
-            
-            hidden_states = self.model(
-                input_ids=input_ids,
-                positions=positions,
-                inputs_embeds=inputs_embeds,
-            )
+        # print("hosseins: ModelWrapperV1.forward()")
+        # print(f"hosseins: ModelWrapperV1 -> forward() 1 {get_shard_spec(input_ids)=}")
+        # print(f"hosseins: ModelWrapperV1 -> forward() 1 {get_shard_spec(positions)=}")
+        # # print(f"hosseins: ModelWrapperV1 -> forward() 1 {get_shard_spec(inputs_embeds)=}")
+        # with xp.Trace("ModelWrapperV1.forward()"):
+        assert self.model is not None
+        
+        hidden_states = self.model(
+            input_ids=input_ids,
+            positions=positions,
+            inputs_embeds=inputs_embeds,
+        )
 
-            print(f"hosseins: ModelWrapperV1 -> forward() 2 {get_shard_spec(hidden_states)=}")
-            print(f"hosseins: ModelWrapperV1 -> forward() 2 {get_shard_spec(input_ids)=}")
-            print(f"hosseins: ModelWrapperV1 -> forward() 2 {get_shard_spec(positions)=}")
-            # print(f"hosseins: ModelWrapperV1 -> forward() 2 {get_shard_spec(inputs_embeds)=}")
+        # print(f"hosseins: ModelWrapperV1 -> forward() 2 {get_shard_spec(hidden_states)=}")
+        # print(f"hosseins: ModelWrapperV1 -> forward() 2 {get_shard_spec(input_ids)=}")
+        # print(f"hosseins: ModelWrapperV1 -> forward() 2 {get_shard_spec(positions)=}")
+        # # print(f"hosseins: ModelWrapperV1 -> forward() 2 {get_shard_spec(inputs_embeds)=}")
 
-            return hidden_states
+        return hidden_states
 
     def sample_from_hidden(
         self,
@@ -1015,30 +1015,29 @@ class ModelWrapperV1(nn.Module):
         separately from `forward` for lighter compilation overhead.
         """
         # Tensor `sample_hidden_states` is of fixed pre-compiled size.
-        with xp.Trace("ModelWrapperV1.sample_from_hidden()"):
-            sample_hidden_states = \
-                hidden_states[sampling_metadata.indices_do_sample]
-            logits = self.compute_logits(sample_hidden_states)
-            # Optimized greedy sampling branch, tracing both paths in a single pass
-            # NOTE all_greedy is a scalar, this is just an optimized if/else.
-            out_tokens = torch.where(sampling_metadata.all_greedy,
-                            torch.argmax(logits, dim=-1, keepdim=True),
-                            self.sample(logits, sampling_metadata)\
-                                                .sampled_token_ids)
-            return out_tokens
+        # with xp.Trace("ModelWrapperV1.sample_from_hidden()"):
+        sample_hidden_states = \
+            hidden_states[sampling_metadata.indices_do_sample]
+        logits = self.compute_logits(sample_hidden_states)
+        # Optimized greedy sampling branch, tracing both paths in a single pass
+        # NOTE all_greedy is a scalar, this is just an optimized if/else.
+        out_tokens = torch.where(sampling_metadata.all_greedy,
+                        torch.argmax(logits, dim=-1, keepdim=True),
+                        self.sample(logits, sampling_metadata)\
+                                            .sampled_token_ids)
+        return out_tokens
 
     def compute_logits(self,
                        hidden_states: torch.Tensor) -> Optional[torch.Tensor]:
-        print(f"hosseins: ModelWrapperV1 -> compute_logits() {hidden_states.shape=}")
-        print(f"hosseins: ModelWrapperV1 -> compute_logits() {get_shard_spec(hidden_states)=}")
-        
+        # print(f"hosseins: ModelWrapperV1 -> compute_logits() {hidden_states.shape=}")
+        # print(f"hosseins: ModelWrapperV1 -> compute_logits() {get_shard_spec(hidden_states)=}")
 
         # SamplingMetadata here for pruning output in LogitsProcessor, disabled
-        with xp.Trace("ModelWrapperV1.compute_logits()"):
-            logits = self.model.compute_logits(hidden_states, None)
-            print(f"hosseins: ModelWrapperV1 -> compute_logits() {logits.shape=}")
-            print(f"hosseins: ModelWrapperV1 -> compute_logits() {get_shard_spec(logits)=}")
-            return logits
+        # with xp.Trace("ModelWrapperV1.compute_logits()"):
+        logits = self.model.compute_logits(hidden_states, None)
+        # print(f"hosseins: ModelWrapperV1 -> compute_logits() {logits.shape=}")
+        # print(f"hosseins: ModelWrapperV1 -> compute_logits() {get_shard_spec(logits)=}")
+        return logits
 
     def get_multimodal_embeddings(self, *args, **kwargs):
         return self.model.get_multimodal_embeddings(*args, **kwargs)

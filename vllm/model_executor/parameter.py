@@ -40,7 +40,7 @@ class BasevLLMParameter(Parameter):
 
         :returns: a torch.nn.parameter
         """
-        print("hosseins: BasevLLMParameter -> __init__")
+        # print("hosseins: BasevLLMParameter -> __init__")
         # During weight loading, we often do something like:
         # narrowed_tensor = param.data.narrow(0, offset, len)
         # narrowed_tensor.copy_(real_weight)
@@ -104,7 +104,7 @@ class _ColumnvLLMParameter(BasevLLMParameter):
         return self._output_dim
 
     def load_column_parallel_weight(self, loaded_weight: torch.Tensor):
-        print("hosseins: _ColumnvLLMParameter -> load_column_parallel_weight")
+        # print("hosseins: _ColumnvLLMParameter -> load_column_parallel_weight")
         tp_rank = get_tensor_model_parallel_rank()
         shard_size = self.data.shape[self.output_dim]
         loaded_weight = loaded_weight.narrow(self.output_dim,
@@ -115,7 +115,7 @@ class _ColumnvLLMParameter(BasevLLMParameter):
 
     def load_merged_column_weight(self, loaded_weight: torch.Tensor, **kwargs):
 
-        print("hosseins: _ColumnvLLMParameter -> load_merged_column_weight")
+        # print("hosseins: _ColumnvLLMParameter -> load_merged_column_weight")
         shard_offset = kwargs.get("shard_offset")
         shard_size = kwargs.get("shard_size")
         if isinstance(
@@ -137,7 +137,7 @@ class _ColumnvLLMParameter(BasevLLMParameter):
         shard_spmd(self.data, self.mesh, get_col_parallel_partition_spec())
 
     def load_qkv_weight(self, loaded_weight: torch.Tensor, **kwargs):
-        print("hosseins: _ColumnvLLMParameter -> load_qkv_weight")
+        # print("hosseins: _ColumnvLLMParameter -> load_qkv_weight")
 
         shard_offset = kwargs.get("shard_offset")
         shard_size = kwargs.get("shard_size")
@@ -173,7 +173,7 @@ class RowvLLMParameter(BasevLLMParameter):
     """
 
     def __init__(self, input_dim: int, **kwargs):
-        print("hosseins: RowvLLMParameter -> init")
+        # print("hosseins: RowvLLMParameter -> init")
         self._input_dim = input_dim
         super().__init__(**kwargs)
 
@@ -182,7 +182,7 @@ class RowvLLMParameter(BasevLLMParameter):
         return self._input_dim
 
     def load_row_parallel_weight(self, loaded_weight: torch.Tensor):
-        print("hosseins: RowvLLMParameter -> load_row_parallel_weight")
+        # print("hosseins: RowvLLMParameter -> load_row_parallel_weight")
         tp_rank = get_tensor_model_parallel_rank()
         shard_size = self.data.shape[self.input_dim]
         loaded_weight = loaded_weight.narrow(self.input_dim,

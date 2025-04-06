@@ -127,13 +127,13 @@ class EngineCore:
 
         # Get all kv cache needed by the model
         kv_cache_specs = self.model_executor.get_kv_cache_specs()
-        print(f"hosseins: _initialize_kv_caches() {self.model_executor=}")
+        # print(f"hosseins: _initialize_kv_caches() {self.model_executor=}")
 
-        print(f"hosseins: _initialize_kv_caches() {kv_cache_specs=}")
+        # print(f"hosseins: _initialize_kv_caches() {kv_cache_specs=}")
         # Profiles the peak memory usage of the model to determine how much
         # memory can be allocated for kv cache.
         available_gpu_memory = self.model_executor.determine_available_memory()
-        print(f"hosseins: _initialize_kv_caches() {available_gpu_memory=}")
+        # print(f"hosseins: _initialize_kv_caches() {available_gpu_memory=}")
 
         assert len(kv_cache_specs) == len(available_gpu_memory)
         # Get the kv cache tensor size
@@ -143,7 +143,7 @@ class EngineCore:
             for kv_cache_spec_one_worker, available_gpu_memory_one_worker in
             zip(kv_cache_specs, available_gpu_memory)
         ]
-        print(f"hosseins: _initialize_kv_caches() {kv_cache_configs=}")
+        # print(f"hosseins: _initialize_kv_caches() {kv_cache_configs=}")
 
         # Since we use a shared centralized controller, we need the
         # `kv_cache_config` to be consistent across all workers to make sure
@@ -159,7 +159,7 @@ class EngineCore:
         num_gpu_blocks = kv_cache_configs[0].num_blocks
         num_cpu_blocks = 0
         scheduler_kv_cache_config = kv_cache_configs[0]
-        print(f"hosseins: _initialize_kv_caches() {num_gpu_blocks=}")
+        # print(f"hosseins: _initialize_kv_caches() {num_gpu_blocks=}")
 
         # Initialize kv cache and warmup the execution
         self.model_executor.initialize_from_config(kv_cache_configs)
@@ -200,7 +200,7 @@ class EngineCore:
 
     def step(self) -> EngineCoreOutputs:
         """Schedule, execute, and make output."""
-        print(f'hosseins: EngineCore.step() starts')
+        # print(f'hosseins: EngineCore.step() starts')
         # with xp.Trace("EngineCore.step()"):
             # Check for any requests remaining in the scheduler - unfinished,
             # or finished and not yet removed from the batch.
@@ -213,7 +213,7 @@ class EngineCore:
         output = self.model_executor.execute_model(scheduler_output)
         engine_core_outputs = self.scheduler.update_from_output(
             scheduler_output, output)  # type: ignore
-        print(f'hosseins: EngineCore.step() ends')
+        # print(f'hosseins: EngineCore.step() ends')
         return engine_core_outputs
 
     def step_with_batch_queue(self) -> Optional[EngineCoreOutputs]:

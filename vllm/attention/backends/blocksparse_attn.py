@@ -371,7 +371,7 @@ class BlocksparseFlashAttentionImpl(AttentionImpl):
         attn_metadata: BlocksparseFlashAttentionMetadata,
         output: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-        print("hosseins: BlocksparseFlashAttentionImpl. forward()")
+        # print("hosseins: BlocksparseFlashAttentionImpl. forward()")
         """Forward pass with FlashAttention and PagedAttention.
 
         Args:

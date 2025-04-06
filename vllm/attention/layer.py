@@ -48,7 +48,7 @@ class Attention(nn.Module):
         attn_type: str = AttentionType.DECODER,
         **extra_impl_args,
     ) -> None:
-        print("hosseins: Attention. init()")
+        # print("hosseins: Attention. init()")
         """
         The KV cache is stored inside this class and is accessed via
         `self.kv_cache`.
@@ -171,7 +171,7 @@ class Attention(nn.Module):
         # definition specify the output tensor shape.
         output_shape: Optional[torch.Size] = None,
     ) -> torch.Tensor:
-        print("hosseins: Attention. forward()")
+        # print("hosseins: Attention. forward()")
         """
         The KV cache is stored inside this class and is accessed via
         `self.kv_cache`.
@@ -181,10 +181,10 @@ class Attention(nn.Module):
         context using
         `vllm.forward_context.get_forward_context().attn_metadata`.
         """
-        print(f"hosseins: Attention -> forward() {key.shape=}")
-        print(f"hosseins: Attention -> forward() {get_shard_spec(key)=} {value.shape=}")
-        print(f"hosseins: Attention -> forward() {value.shape=}")
-        print(f"hosseins: Attention -> forward() {get_shard_spec(value)=} {value.shape=}")
+        # print(f"hosseins: Attention -> forward() {key.shape=}")
+        # print(f"hosseins: Attention -> forward() {get_shard_spec(key)=} {value.shape=}")
+        # print(f"hosseins: Attention -> forward() {value.shape=}")
+        # print(f"hosseins: Attention -> forward() {get_shard_spec(value)=} {value.shape=}")
 
         if self.calculate_kv_scales:
             attn_metadata = get_forward_context().attn_metadata
@@ -297,7 +297,7 @@ class MultiHeadAttention(nn.Module):
         key: torch.Tensor,
         value: torch.Tensor,
     ) -> torch.Tensor:
-        print("hosseins: MultiHeadAttention. forward()")
+        # print("hosseins: MultiHeadAttention. forward()")
         """Input shape: batch_size x seq_len x hidden_size"""
         # TODO(Isotr0py): Use existing backend implementations and support FA3
         bsz, q_len, _ = query.size()

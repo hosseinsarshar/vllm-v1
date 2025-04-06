@@ -213,24 +213,24 @@ class LLMEngine:
             self.engine_core.add_request(child_request)
 
     def step(self) -> list[RequestOutput]:
-        print(f'hosseins: LLMEngine.step() starts')
-        with xp.Trace("LLMEngine.step()"):
-            if self.should_execute_dummy_batch:
-                self.should_execute_dummy_batch = False
-                self.engine_core.execute_dummy_batch()
-                return []
+        # print(f'hosseins: LLMEngine.step() starts')
+        # with xp.Trace("LLMEngine.step()"):
+        if self.should_execute_dummy_batch:
+            self.should_execute_dummy_batch = False
+            self.engine_core.execute_dummy_batch()
+            return []
 
-            # 1) Get EngineCoreOutput from the EngineCore.
-            outputs = self.engine_core.get_output()
+        # 1) Get EngineCoreOutput from the EngineCore.
+        outputs = self.engine_core.get_output()
 
-            # 2) Process EngineCoreOutputs.
-            processed_outputs = self.output_processor.process_outputs(
-                outputs.outputs)
+        # 2) Process EngineCoreOutputs.
+        processed_outputs = self.output_processor.process_outputs(
+            outputs.outputs)
 
-            # 3) Abort any reqs that finished due to stop strings.
-            self.engine_core.abort_requests(processed_outputs.reqs_to_abort)
-            print(f'hosseins: LLMEngine.step() ends')
-            return processed_outputs.request_outputs
+        # 3) Abort any reqs that finished due to stop strings.
+        self.engine_core.abort_requests(processed_outputs.reqs_to_abort)
+        # print(f'hosseins: LLMEngine.step() ends')
+        return processed_outputs.request_outputs
 
     def get_model_config(self):
         return self.model_config

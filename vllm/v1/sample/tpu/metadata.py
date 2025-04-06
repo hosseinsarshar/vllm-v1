@@ -80,7 +80,7 @@ class TPUSupportedSamplingMetadata:
             temperature: [0.7, 0.2, 0.9]=>[0.7, 0.2, 0.9, 0.0]
             sample indices: [4, 10, 11]=>indices_do_sample: [4, 10, 11, 0]
         """
-        print("hosseins: TPUSupportedSamplingMetadata.from_input_batch()")
+        # print("hosseins: TPUSupportedSamplingMetadata.from_input_batch()")
         num_reqs = input_batch.num_reqs
         padded_num_reqs = len(indices_do_sample)
 
