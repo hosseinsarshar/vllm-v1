@@ -156,11 +156,11 @@ class TPUModelRunner(ModelRunnerBase[ModelInputForTPU]):
         xm.wait_device_ops()
         model = ModelWrapper(model)
         # hosseins: torch.compile
-        self.model = model
-        # self.model = torch.compile(model,
-        #                            backend="openxla",
-        #                            fullgraph=True,
-        #                            dynamic=False)
+        # self.model = model
+        self.model = torch.compile(model,
+                                   backend="openxla",
+                                   fullgraph=True,
+                                   dynamic=False)
 
     def get_model(self) -> nn.Module:
         return self.model.model

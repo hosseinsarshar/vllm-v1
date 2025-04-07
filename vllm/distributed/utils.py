@@ -440,13 +440,13 @@ def get_shard_spec(tensor, show_visual=False):
 from torch.library import impl, custom_op
 
 
-@custom_op("xla::_spmd_full_to_shard_shape", mutates_args=())
-def _spmd_full_to_shard_shape(t: torch.Tensor) -> torch.Tensor:
-    return torch_xla._XLAC._spmd_full_to_shard_shape(t)
-
-@_spmd_full_to_shard_shape.register_fake
-def _(t: torch.Tensor) -> torch.Tensor:
-  return torch.empty_like(t)
+# @custom_op("xla::_spmd_full_to_shard_shape", mutates_args=())
+# def _spmd_full_to_shard_shape(t: torch.Tensor) -> torch.Tensor:
+#     return torch_xla._XLAC._spmd_full_to_shard_shape(t)
+# 
+# @_spmd_full_to_shard_shape.register_fake
+# def _(t: torch.Tensor) -> torch.Tensor:
+#   return torch.empty_like(t)
 
 
 def enable_man_sharding(t) -> XLAShardedTensor:
@@ -485,21 +485,59 @@ def enable_manual_sharding(t: Union[torch.Tensor, XLAShardedTensor],
   t = torch_xla._XLAC._spmd_full_to_shard_shape(unwrap_sharded_tensor(t))
   return wrap_as_sharded_tensor(t)
 
+# @custom_op("xla::_spmd_full_to_shard_shape", mutates_args=())
+# def _spmd_full_to_shard_shape(t: torch.Tensor) -> torch.Tensor:
+#     return torch_xla._XLAC._spmd_full_to_shard_shape(t)
+# 
+# @_spmd_full_to_shard_shape.register_fake
+# def _(t: torch.Tensor) -> torch.Tensor:
+#   return torch.empty_like(t)
 
-def enable_manual_sharding_wrapper(tensor,
-                           partition_spec):
+PartitionSpec = tuple[Union[tuple[Union[int, str], ...], int, str, None], ...]
+
+# from torch_xla._XLAC import _spmd_full_to_shard_shape
+allowed_spmd_full_to_shard_shape = torch.compiler.allow_in_graph(torch_xla._XLAC._spmd_full_to_shard_shape)
+
+from typing import Optional, List, Tuple
+
+@custom_op("xla::enable_manual_sharding_wrapper", mutates_args=())
+def enable_manual_sharding_wrapper(tensor: torch.Tensor,
+                           partition_spec_str: str
+) -> torch.Tensor:
+  if not is_spmd(): 
+        return tensor
+  if partition_spec_str is None:
+      raise Exception("partition_spec is None 1")
+  partition_spec = eval(partition_spec_str)
+  # t = torch_xla._XLAC._spmd_full_to_shard_shape(unwrap_sharded_tensor(tensor))
+  # return wrap_as_sharded_tensor(t)
+  return xs.enable_manual_sharding(tensor, partition_spec=partition_spec, mesh=get_mesh()).global_tensor
+
+@enable_manual_sharding_wrapper.register_fake
+def enable_manual_sharding_wrapper_fake(tensor: torch.Tensor, partition_spec_str: str):
+    partition_spec = eval(partition_spec_str)
+    assert len(tensor.shape) == len(partition_spec), f"tensor and partition_spec lengths dont match - {tensor.shape=} {partition_spec_str=} {len(partition_spec)=}"
+
+    ret_shape = tuple([(x if partition_spec[i] is None else x // 4) for i, x in enumerate(tensor.shape)])
+    tensor = torch.empty(ret_shape, dtype=tensor.dtype, device=tensor.device)
+
+    return tensor
+    
+@custom_op("xla::disable_manual_sharding_wrapper", mutates_args=())
+def disable_manual_sharding_wrapper(tensor: torch.Tensor, partition_spec_str: str, full_shape: List[int]) -> torch.Tensor:
   if not is_spmd(): 
         return tensor
   
-  return xs.enable_manual_sharding(tensor, partition_spec, mesh=get_mesh()).global_tensor
+  partition_spec = eval(partition_spec_str)
+  return xs.disable_manual_sharding(tensor, partition_spec=partition_spec, 
+                                    full_shape=tuple(full_shape), mesh=get_mesh()).global_tensor
 
 
-def disable_manual_sharding_wrapper(tensor, partition_spec, full_shape):
-  if not is_spmd(): 
-        return tensor
-  
-  return xs.disable_manual_sharding(tensor, partition_spec, 
-                                    full_shape, mesh=get_mesh()).global_tensor
+@disable_manual_sharding_wrapper.register_fake
+def disable_manual_sharding_wrapper_fake(tensor: torch.Tensor, partition_spec_str: str, full_shape: List[int]):
+    tensor = torch.empty(full_shape, dtype=tensor.dtype, device=tensor.device)
+
+    return tensor
 
 
 def get_partition_spec(t):

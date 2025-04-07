@@ -778,13 +778,13 @@ class TPUModelRunner:
         xm.wait_device_ops()
         model = ModelWrapperV1(model)
         # print("hosseins: load_model() model is loaded")
-        self.model = model
+        # self.model = model
 
         # hosseins: torch.compile
-        # self.model = torch.compile(model,
-        #                            backend="openxla",
-        #                            fullgraph=True,
-        #                            dynamic=False)
+        self.model = torch.compile(model,
+                                   backend="openxla",
+                                   fullgraph=True,
+                                   dynamic=False)
 
     @torch.no_grad()
     def _dummy_run(self, kv_caches, num_tokens: int) -> None:

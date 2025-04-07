@@ -330,7 +330,7 @@ class LlamaDecoderLayer(nn.Module):
         return hidden_states, residual
 
 # hosseins: torch.compile
-# @support_torch_compile
+@support_torch_compile
 class LlamaModel(nn.Module):
 
     def __init__(self,
