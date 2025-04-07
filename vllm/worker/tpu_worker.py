@@ -117,8 +117,8 @@ class TPUWorker(LoRANotSupportedWorkerBase, LocalOrDistributedWorkerBase):
             logger.info("Profiling enabled. Traces will be saved to: %s",
                         self.profile_dir)
             self.profiler = xp.start_server(9012)
-            duration_ms = 500000
-            xp.trace_detached(f'localhost:{9012}', self.profile_dir, duration_ms=duration_ms)
+            # duration_ms = 500000
+            # xp.trace_detached(f'localhost:{9012}', self.profile_dir, duration_ms=duration_ms)
 
     def start_profile(self):
         if self.rank < 1:
