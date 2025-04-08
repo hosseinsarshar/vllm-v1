@@ -567,11 +567,11 @@ def _get_kv_cache_config_uniform_type(vllm_config: VllmConfig,
     # print(f"hosseins: {page_size=}")
     # print(f"hosseins: {available_memory=}")
     #  * max(1, len(get_device_ids()))
-    num_blocks = int(available_memory // page_size // len(kv_cache_spec))
-    # print(f"hosseins: {num_blocks=}")
+    num_blocks = int((available_memory) // page_size // len(kv_cache_spec))
+    print(f"hosseins: {num_blocks=}")
     num_blocks = max(num_blocks, 0)
-    # print(f"hosseins: {num_blocks=}")
-    # print(f"hosseins: {vllm_config.cache_config.num_gpu_blocks_override=}")
+    print(f"hosseins: {num_blocks=}")
+    print(f"hosseins: {available_memory=}")
 
     if vllm_config.cache_config.num_gpu_blocks_override is not None:
         num_gpu_blocks_override = \
@@ -582,8 +582,8 @@ def _get_kv_cache_config_uniform_type(vllm_config: VllmConfig,
         num_blocks = num_gpu_blocks_override
 
     num_tokens = num_blocks * vllm_config.cache_config.block_size
-    # print(f"hosseins: {vllm_config.cache_config.block_size=}")
-    # print(f"hosseins: {num_tokens=}")
+    print(f"hosseins: {vllm_config.cache_config.block_size=}")
+    print(f"hosseins: {num_tokens=}")
     num_tokens_str = f"{num_tokens:,}"
     logger.info("GPU KV cache size: %s tokens", num_tokens_str)
     max_model_len_str = f"{vllm_config.model_config.max_model_len:,}"
@@ -592,6 +592,8 @@ def _get_kv_cache_config_uniform_type(vllm_config: VllmConfig,
                 max_model_len_str, max_concurrency)
 
     per_layer_size = page_size * num_blocks
+    print(f"hosseins: {per_layer_size=}")
+
     # All layers have the same KV cache spec, so we create one kv cache group
     # for all layers.
     grouped_layer_names = [list(kv_cache_spec.keys())]
