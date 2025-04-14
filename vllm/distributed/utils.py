@@ -429,6 +429,7 @@ def get_shard_spec(tensor, show_visual=False):
     if not is_spmd(): 
         return None
     
+    # import torch_xla.core.xla_model as xm
     # xm.mark_step()
     sharding = torch_xla._XLAC._get_xla_sharding_spec(tensor)
     if show_visual:
@@ -534,3 +535,34 @@ def is_spmd():
         return True
     else:
         return False
+
+def get_torch_tensor_gbytes(tensor: torch.Tensor) -> int:
+    """
+    Calculates the total memory in bytes used by the data buffer of a
+    PyTorch tensor on its assigned device (CPU or GPU).
+
+    The calculation is: number_of_elements * bytes_per_element.
+
+    Args:
+        tensor: The input PyTorch tensor (torch.Tensor).
+
+    Returns:
+        int: The total memory in bytes occupied by the tensor's data buffer.
+
+    Raises:
+        TypeError: If the input is not a torch.Tensor.
+    """
+    # 1. Validate input type
+    if not isinstance(tensor, torch.Tensor):
+        raise TypeError(f"Input must be a torch.Tensor, but received type {type(tensor)}")
+
+    # 2. Get the total number of elements in the tensor
+    num_elements = tensor.numel()
+
+    # 3. Get the size (in bytes) of a single element based on the tensor's data type
+    bytes_per_element = tensor.element_size()
+
+    # 4. Calculate total bytes
+    total_bytes = num_elements * bytes_per_element
+
+    return total_bytes / (10**9)

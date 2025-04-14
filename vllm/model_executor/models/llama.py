@@ -53,7 +53,7 @@ from .utils import (AutoWeightsLoader, PPMissingLayer, extract_layer_index,
                     is_pp_missing_parameter,
                     make_empty_intermediate_tensors_factory, make_layers,
                     maybe_prefix)
-from vllm.distributed.utils import get_shard_spec
+from vllm.distributed.utils import get_shard_spec, get_torch_tensor_gbytes
 import torch_xla.debug.profiler as xp
 
 class LlamaMLP(nn.Module):
@@ -361,6 +361,7 @@ class LlamaModel(nn.Module):
             )
         else:
             self.embed_tokens = PPMissingLayer()
+        
         self.start_layer, self.end_layer, self.layers = make_layers(
             config.num_hidden_layers,
             lambda prefix: layer_type(config=config,
@@ -369,6 +370,7 @@ class LlamaModel(nn.Module):
                                       prefix=prefix),
             prefix=f"{prefix}.layers",
         )
+        
         if get_pp_group().is_last_rank:
             self.norm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         else:
@@ -448,7 +450,13 @@ class LlamaModel(nn.Module):
         params_dict = dict(self.named_parameters())
         loaded_params: Set[str] = set()
         for name, loaded_weight in weights:
-            # print(f"hosseins: DefaultModelLoader -> load_weights() {name=}")
+            for loaded_param_name in loaded_params:
+                loaded_param = params_dict[loaded_param_name]
+                loaded_param_size = get_torch_tensor_gbytes(loaded_param)
+                print(f"hosseins: Loaded param: '{name}': [{loaded_param_size:.2f} GB] [{loaded_param.shape=}]")
+
+            print(f"hosseins: DefaultModelLoader -> load_weights() {name=}")
+            # breakpoint()
             if "rotary_emb.inv_freq" in name:
                 continue
             if ("rotary_emb.cos_cached" in name
@@ -503,8 +511,9 @@ class LlamaModel(nn.Module):
 
         # print("hosseins: load_weights() is completed")
 
+        # breakpoint()
+        
         print("hosseins: ============================= Layers Loaded =============================")
-
         params_dict = dict(self.named_parameters())
         for params_name in dict(self.named_parameters()):
             param = params_dict[params_name]

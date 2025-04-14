@@ -441,9 +441,10 @@ class DefaultModelLoader(BaseModelLoader):
                 model = _initialize_model(vllm_config=vllm_config)
 
             weights_to_load = {name for name, _ in model.named_parameters()}
-            
+            # breakpoint()
             loaded_weights = model.load_weights(
                 self._get_all_weights(model_config, model))
+            # breakpoint()
             self.counter_after_loading_weights = time.perf_counter()
             logger.info(
                 "Loading weights took %.2f seconds",

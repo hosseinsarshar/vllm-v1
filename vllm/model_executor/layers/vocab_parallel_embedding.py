@@ -30,9 +30,7 @@ class UnquantizedEmbeddingMethod(QuantizeMethodBase):
                        output_size: int, params_dtype: torch.dtype,
                        **extra_weight_attrs):
         """Create weights for embedding layer."""
-        weight = Parameter(torch.empty(sum(output_partition_sizes),
-                                       input_size_per_partition,
-                                       dtype=params_dtype),
+        weight = Parameter(torch.empty(sum(output_partition_sizes),input_size_per_partition,dtype=params_dtype),
                            requires_grad=False)
         set_weight_attrs(weight, {"input_dim": 1, "output_dim": 0})
         layer.register_parameter("weight", weight)
@@ -272,7 +270,7 @@ class VocabParallelEmbedding(torch.nn.Module):
         self.num_added_embeddings_per_partition = (
             self.shard_indices.added_vocab_end_index -
             self.shard_indices.added_vocab_start_index)
-
+        # breakpoint()
         self.quant_method.create_weights(self,
                                          self.embedding_dim,
                                          [self.num_embeddings_per_partition],
@@ -280,6 +278,8 @@ class VocabParallelEmbedding(torch.nn.Module):
                                          self.num_embeddings_padded,
                                          params_dtype=params_dtype,
                                          weight_loader=self.weight_loader)
+        shard_spmd(data=self.weight, mesh=self.mesh, partition_spec=get_col_parallel_partition_spec())
+        # breakpoint()
 
     @classmethod
     def _get_indices(cls, vocab_size_padded: int, org_vocab_size_padded: int,

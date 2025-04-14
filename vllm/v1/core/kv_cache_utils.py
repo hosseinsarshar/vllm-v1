@@ -564,15 +564,15 @@ def _get_kv_cache_config_uniform_type(vllm_config: VllmConfig,
     # print(f"hosseins: {page_sizes=}")
     assert len(page_sizes) == 1
     page_size = page_sizes.pop()
-    # print(f"hosseins: {page_size=}")
-    # print(f"hosseins: {available_memory=}")
+    print(f"hosseins: {page_size=}")
+    print(f"hosseins: {available_memory=}")
     #  * max(1, len(get_device_ids()))
     num_blocks = int(available_memory // page_size // len(kv_cache_spec))
     # print(f"hosseins: {num_blocks=}")
     num_blocks = max(num_blocks, 0)
     # print(f"hosseins: {num_blocks=}")
     # print(f"hosseins: {vllm_config.cache_config.num_gpu_blocks_override=}")
-
+    
     if vllm_config.cache_config.num_gpu_blocks_override is not None:
         num_gpu_blocks_override = \
             vllm_config.cache_config.num_gpu_blocks_override

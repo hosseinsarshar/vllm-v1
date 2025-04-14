@@ -306,6 +306,7 @@ class ReplicatedLinear(LinearBase):
             self.register_parameter("bias", None)
 
     def weight_loader(self, param: Parameter, loaded_weight: torch.Tensor):
+        # breakpoint()
         # If the weight on disk does not have a shape, give it one
         # (such scales for AutoFp8).
         # Special case for GGUF
@@ -422,6 +423,7 @@ class ColumnParallelLinear(LinearBase):
             weight_loader=(
                 self.weight_loader_v2 if self.quant_method.__class__.__name__
                 in WEIGHT_LOADER_V2_SUPPORTED else self.weight_loader))
+        shard_spmd(data=self.weight, mesh=self.mesh, partition_spec=get_col_parallel_partition_spec())
         if bias:
             self.bias = Parameter(
                 torch.empty(self.output_size_per_partition,
@@ -434,6 +436,7 @@ class ColumnParallelLinear(LinearBase):
             self.register_parameter("bias", None)
 
     def weight_loader(self, param: Parameter, loaded_weight: torch.Tensor):
+        # breakpoint()
         tp_rank = get_tensor_model_parallel_rank()
         output_dim = getattr(param, "output_dim", None)
 
@@ -476,6 +479,7 @@ class ColumnParallelLinear(LinearBase):
     def weight_loader_v2(self, param: Parameter, loaded_weight: torch.Tensor):
         # Special case for loading scales off disk, which often do not
         # have a shape (such as in the case of AutoFP8).
+        # breakpoint()
         if len(loaded_weight.shape) == 0:
             assert loaded_weight.numel() == 1
             loaded_weight = loaded_weight.reshape(1)
@@ -568,6 +572,7 @@ class MergedColumnParallelLinear(ColumnParallelLinear):
                       loaded_weight: torch.Tensor,
                       loaded_shard_id: Optional[int] = None):
 
+        # breakpoint()
         # Special case for GGUF
         # initialize GGUF param after we know the quantize type
         is_gguf_weight = getattr(param, "is_gguf_weight", False)
@@ -783,6 +788,7 @@ class MergedColumnParallelLinear(ColumnParallelLinear):
                          param: BasevLLMParameter,
                          loaded_weight: torch.Tensor,
                          loaded_shard_id: Optional[int] = None):
+        # breakpoint()
         if loaded_shard_id is None:
             if isinstance(param, PerTensorScaleParameter):
                 param.load_merged_column_weight(loaded_weight=loaded_weight,
@@ -955,6 +961,7 @@ class QKVParallelLinear(ColumnParallelLinear):
                          param: BasevLLMParameter,
                          loaded_weight: torch.Tensor,
                          loaded_shard_id: Optional[str] = None):
+        # breakpoint()
         if loaded_shard_id is None:  # special case for certain models
             if isinstance(param, PerTensorScaleParameter):
                 param.load_qkv_weight(loaded_weight=loaded_weight, shard_id=0)
@@ -981,7 +988,7 @@ class QKVParallelLinear(ColumnParallelLinear):
                       param: Parameter,
                       loaded_weight: torch.Tensor,
                       loaded_shard_id: Optional[str] = None):
-
+        # breakpoint()
         # Special case for GGUF
         # initialize GGUF param after we know the quantize type
         is_gguf_weight = getattr(param, "is_gguf_weight", False)
@@ -1246,6 +1253,7 @@ class RowParallelLinear(LinearBase):
             weight_loader=(
                 self.weight_loader_v2 if self.quant_method.__class__.__name__
                 in WEIGHT_LOADER_V2_SUPPORTED else self.weight_loader))
+        shard_spmd(self.weight, self.mesh, get_row_parallel_partition_spec())
         if not reduce_results and (bias and not skip_bias_add):
             raise ValueError("When not reduce the results, adding bias to the "
                              "results can lead to incorrect results")
@@ -1261,6 +1269,7 @@ class RowParallelLinear(LinearBase):
             self.register_parameter("bias", None)
 
     def weight_loader(self, param: Parameter, loaded_weight: torch.Tensor):
+        # breakpoint()
         tp_rank = get_tensor_model_parallel_rank()
         tp_size = get_tensor_model_parallel_world_size()
         input_dim = getattr(param, "input_dim", None)
@@ -1315,6 +1324,7 @@ class RowParallelLinear(LinearBase):
     def weight_loader_v2(self, param: BasevLLMParameter,
                          loaded_weight: torch.Tensor):
 
+        # breakpoint()
         # Special case for loading scales off disk, which often do not
         # have a shape (such as in the case of AutoFP8).
         if len(loaded_weight.shape) == 0:
@@ -1551,6 +1561,7 @@ class QKVCrossParallelLinear(LinearBase):
                       param: torch.nn.Parameter,
                       loaded_weight: torch.Tensor,
                       loaded_shard_id: Optional[str] = None):
+        # breakpoint()
         layer = (self.q_proj_decoder
                  if loaded_shard_id == "q" else self.kv_proj_encoder)
         target_param = self.select_proj_params(layer, param)
