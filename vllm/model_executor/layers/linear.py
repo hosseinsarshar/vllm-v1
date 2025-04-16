@@ -422,6 +422,7 @@ class ColumnParallelLinear(LinearBase):
             weight_loader=(
                 self.weight_loader_v2 if self.quant_method.__class__.__name__
                 in WEIGHT_LOADER_V2_SUPPORTED else self.weight_loader))
+        shard_spmd(data=self.weight, mesh=self.mesh, partition_spec=get_col_parallel_partition_spec())
         if bias:
             self.bias = Parameter(
                 torch.empty(self.output_size_per_partition,
@@ -1246,6 +1247,7 @@ class RowParallelLinear(LinearBase):
             weight_loader=(
                 self.weight_loader_v2 if self.quant_method.__class__.__name__
                 in WEIGHT_LOADER_V2_SUPPORTED else self.weight_loader))
+        shard_spmd(self.weight, self.mesh, get_row_parallel_partition_spec())
         if not reduce_results and (bias and not skip_bias_add):
             raise ValueError("When not reduce the results, adding bias to the "
                              "results can lead to incorrect results")

@@ -53,7 +53,7 @@ from .utils import (AutoWeightsLoader, PPMissingLayer, extract_layer_index,
                     is_pp_missing_parameter,
                     make_empty_intermediate_tensors_factory, make_layers,
                     maybe_prefix)
-from vllm.distributed.utils import get_shard_spec
+from vllm.distributed.utils import get_shard_spec, get_torch_tensor_gbytes
 import torch_xla.debug.profiler as xp
 
 class LlamaMLP(nn.Module):
@@ -448,7 +448,7 @@ class LlamaModel(nn.Module):
         params_dict = dict(self.named_parameters())
         loaded_params: Set[str] = set()
         for name, loaded_weight in weights:
-            # print(f"hosseins: DefaultModelLoader -> load_weights() {name=}")
+            print(f"hosseins: DefaultModelLoader -> load_weights() {name=}")
             if "rotary_emb.inv_freq" in name:
                 continue
             if ("rotary_emb.cos_cached" in name
@@ -508,8 +508,8 @@ class LlamaModel(nn.Module):
         params_dict = dict(self.named_parameters())
         for params_name in dict(self.named_parameters()):
             param = params_dict[params_name]
-            print(f"hosseins: [{params_name}] - [{param.shape}] - {get_shard_spec(param)=}")
-        
+            loaded_param_size = get_torch_tensor_gbytes(param)
+            print(f"hosseins: [{params_name}] - [{param.shape}] : [{loaded_param_size:.2f} GB] - {get_shard_spec(param)=}")
 
         return loaded_params
 

@@ -414,6 +414,7 @@ def shard_spmd(data, mesh=None, partition_spec=None, show_visual=False, print_sh
     xm.mark_step()
     # time.sleep(1)
     # # logger.info(f"hosseins: shard_spmd() -> [{type(data)=}]")
+    torch._sync(data)
 
     if show_visual:
         # logger.info("hosseins: after sharding param")
@@ -518,7 +519,7 @@ def enable_manual_sharding_wrapper_fake(tensor: torch.Tensor, partition_spec_str
     partition_spec = eval(partition_spec_str)
     assert len(tensor.shape) == len(partition_spec), f"tensor and partition_spec lengths dont match - {tensor.shape=} {partition_spec_str=} {len(partition_spec)=}"
 
-    ret_shape = tuple([(x if partition_spec[i] is None else x // 4) for i, x in enumerate(tensor.shape)])
+    ret_shape = tuple([(x if partition_spec[i] is None else x // len(get_device_ids())) for i, x in enumerate(tensor.shape)])
     tensor = torch.empty(ret_shape, dtype=tensor.dtype, device=tensor.device)
 
     return tensor
@@ -572,3 +573,34 @@ def is_spmd():
         return True
     else:
         return False
+    
+def get_torch_tensor_gbytes(tensor: torch.Tensor) -> int:
+    """
+    Calculates the total memory in bytes used by the data buffer of a
+    PyTorch tensor on its assigned device (CPU or GPU).
+
+    The calculation is: number_of_elements * bytes_per_element.
+
+    Args:
+        tensor: The input PyTorch tensor (torch.Tensor).
+
+    Returns:
+        int: The total memory in bytes occupied by the tensor's data buffer.
+
+    Raises:
+        TypeError: If the input is not a torch.Tensor.
+    """
+    # 1. Validate input type
+    if not isinstance(tensor, torch.Tensor):
+        raise TypeError(f"Input must be a torch.Tensor, but received type {type(tensor)}")
+
+    # 2. Get the total number of elements in the tensor
+    num_elements = tensor.numel()
+
+    # 3. Get the size (in bytes) of a single element based on the tensor's data type
+    bytes_per_element = tensor.element_size()
+
+    # 4. Calculate total bytes
+    total_bytes = num_elements * bytes_per_element
+
+    return total_bytes / (10**9)

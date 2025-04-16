@@ -280,6 +280,8 @@ class VocabParallelEmbedding(torch.nn.Module):
                                          self.num_embeddings_padded,
                                          params_dtype=params_dtype,
                                          weight_loader=self.weight_loader)
+        shard_spmd(data=self.weight, mesh=self.mesh, partition_spec=get_col_parallel_partition_spec())
+        
 
     @classmethod
     def _get_indices(cls, vocab_size_padded: int, org_vocab_size_padded: int,
