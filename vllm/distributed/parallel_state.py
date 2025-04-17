@@ -45,6 +45,7 @@ from vllm.distributed.utils import StatelessProcessGroup
 from vllm.logger import init_logger
 from vllm.utils import (direct_register_custom_op, resolve_obj_by_qualname,
                         supports_custom_op)
+import re
 
 if TYPE_CHECKING:
     from vllm.config import VllmConfig
@@ -892,7 +893,6 @@ def initialize_model_parallel(
     # Get world size and rank. Ensure some consistencies.
     assert torch.distributed.is_initialized()
     world_size: int = torch.distributed.get_world_size()
-    # print(f"hosseins: initialize_model_parallel() {world_size=}")
     rank = torch.distributed.get_rank()
     backend = backend or torch.distributed.get_backend(
         get_world_group().device_group)
@@ -915,7 +915,6 @@ def initialize_model_parallel(
     all_ranks = torch.arange(world_size).reshape(
         -1, data_parallel_size, pipeline_model_parallel_size,
         tensor_model_parallel_size)  # noqa
-    # print(f"hosseins: initialize_model_parallel() {all_ranks=}")
 
     # Build the tensor model-parallel groups.
     global _TP

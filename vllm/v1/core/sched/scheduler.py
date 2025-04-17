@@ -112,8 +112,6 @@ class Scheduler(SchedulerInterface):
             cache_size=encoder_cache_size)
 
     def schedule(self) -> SchedulerOutput:
-        # print(f'hosseins: Scheduler.schedule() starts')
- 
         # NOTE(woosuk) on the scheduling algorithm:
         # There's no "decoding phase" nor "prefill phase" in the scheduler.
         # Each request just has the num_computed_tokens and
@@ -448,7 +446,6 @@ class Scheduler(SchedulerInterface):
             self.requests[req_id].num_computed_tokens += num_scheduled_token
 
         self.finished_req_ids = set()
-        # print(f'hosseins: Scheduler.schedule() ends [{scheduler_output=}]')
 
         return scheduler_output
 
@@ -462,8 +459,6 @@ class Scheduler(SchedulerInterface):
     ) -> CachedRequestData:
         # OPTIMIZATION: Cache the CachedRequestData objects to avoid creating
         # them at each scheduling step.
-        # print(f'hosseins: Scheduler._make_cached_request_data() [{num_scheduled_tokens=}]')
-
         num_computed_tokens = request.num_computed_tokens
         num_regular_tokens = num_scheduled_tokens - num_scheduled_spec_tokens
         new_token_ids = request.all_token_ids[
@@ -505,8 +500,6 @@ class Scheduler(SchedulerInterface):
         limitations, the method adjusts `num_new_tokens` to schedule only the
         decoder tokens up to just before the unschedulable encoder input.
         """
-        # print(f'hosseins: Scheduler._try_schedule_encoder_inputs()')
-
         encoder_inputs_to_schedule: list[int] = []
         mm_positions = request.mm_positions
         assert mm_positions is not None
@@ -556,7 +549,6 @@ class Scheduler(SchedulerInterface):
         scheduler_output: SchedulerOutput,
         model_runner_output: ModelRunnerOutput,
     ) -> EngineCoreOutputs:
-        # print(f'hosseins: Scheduler.update_from_output() starts')
         sampled_token_ids = model_runner_output.sampled_token_ids
         spec_token_ids = model_runner_output.spec_token_ids
         logprobs = model_runner_output.logprobs
@@ -672,7 +664,6 @@ class Scheduler(SchedulerInterface):
             #TODO currently sending duplicates here, improve this
             engine_core_outputs.finished_requests = (
                 scheduler_output.finished_req_ids | self.finished_req_ids)
-        # print(f'hosseins: Scheduler.update_from_output() ends')
 
         return engine_core_outputs
 
@@ -692,7 +683,6 @@ class Scheduler(SchedulerInterface):
         For example, the API server can abort a request when the client
         disconnects.
         """
-        # print(f'hosseins: Scheduler.finish_requests() starts')
         assert RequestStatus.is_finished(finished_status)
         if isinstance(request_ids, str):
             request_ids = (request_ids, )
@@ -712,8 +702,6 @@ class Scheduler(SchedulerInterface):
                 self.waiting.remove(request)
             request.status = finished_status
             self._free_request(request)
-        # print(f'hosseins: Scheduler.finish_requests() ends')
-        
 
     def _free_request(self, request: Request) -> None:
         assert request.is_finished()

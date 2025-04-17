@@ -77,7 +77,6 @@ class TPUWorker:
         # MP runtime is initialized.
         self.profiler = None
         self.profile_dir = None
-        # print(f"hosseins: {envs.VLLM_TORCH_PROFILER_DIR=}")
         if envs.VLLM_TORCH_PROFILER_DIR and self.rank < 1:
             # For TPU, we can only have 1 active profiler session for 1 profiler
             # server. So we only profile on rank0.
@@ -85,7 +84,6 @@ class TPUWorker:
             logger.info("Profiling enabled. Traces will be saved to: %s",
                         self.profile_dir)
             self.profiler = xp.start_server(9012)
-            # print(f"hosseins: starting the profile at [{envs.VLLM_TORCH_PROFILER_DIR}]")
             duration_ms = 400000
             xp.trace_detached(f'localhost:{9012}', envs.VLLM_TORCH_PROFILER_DIR, duration_ms=duration_ms)
 
@@ -140,7 +138,6 @@ class TPUWorker:
     def determine_available_memory(self) -> int:
         kv_caches: dict[str, torch.Tensor] = {}
         kv_cache_spec = self.model_runner.get_kv_cache_spec()
-        # print(f"hosseins: [{kv_cache_spec=}]")
         for layer_name, layer_spec in kv_cache_spec.items():
             if isinstance(layer_spec, FullAttentionSpec):
                 dtype = layer_spec.dtype
@@ -225,7 +222,6 @@ class TPUWorker:
 
     def initialize_from_config(self, kv_cache_config: KVCacheConfig) -> None:
         """Allocate GPU KV cache with the specified kv_cache_config."""
-        # print(f"hosseins: initialize_from_config() {kv_cache_config=}")
         self.model_runner.initialize_kv_cache(kv_cache_config)
 
 

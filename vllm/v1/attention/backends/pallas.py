@@ -140,8 +140,6 @@ class PallasAttentionBackendImpl(AttentionImpl):
         attn_metadata: PallasMetadata,
         output: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-        # print("hosseins: PallasAttentionBackendImpl.forward()")
-        
         """Forward pass with Pallas attention.
 
         Args:
@@ -207,38 +205,13 @@ def write_to_kv_cache(
     """
     _, _, num_combined_kv_heads, head_size = kv_cache.shape
     num_kv_heads = num_combined_kv_heads // 2
-    # print(f"hosseins: write_to_kv_cache() 1 {get_shard_spec(key)=} {key.shape=}")
-    # print(f"hosseins: write_to_kv_cache() 1 {get_shard_spec(value)=} {value.shape=}")
-    # print(f"hosseins: write_to_kv_cache() 1 {get_shard_spec(kv_cache)=} {kv_cache.shape=}")
 
     key = key.view(-1, num_kv_heads, head_size)
     value = value.view(-1, num_kv_heads, head_size)
 
-    # print(f"hosseins: write_to_kv_cache() 2 {get_shard_spec(key)=} {value.shape=}")
-    # print(f"hosseins: write_to_kv_cache() 2 {get_shard_spec(value)=} {value.shape=}")
-
-
     kv = torch.cat([key, value], axis=-1).reshape(-1, num_combined_kv_heads,
                                                   head_size)
 
-    # print(f"hosseins: write_to_kv_cache() 3 {get_shard_spec(kv)=} {kv.shape=}")
-
     torch.ops.xla.dynamo_set_buffer_donor_(kv_cache, True)
-
-
-    # # print(f"hosseins: write_to_kv_cache() {key_cache.shape=}")
-    # # print(f"hosseins: write_to_kv_cache() {get_shard_spec(key_cache)=} {key_cache.shape=}")
-    # # print(f"hosseins: write_to_kv_cache() {value_cache.shape=}")
-    # # print(f"hosseins: write_to_kv_cache() {get_shard_spec(value_cache)=} {value_cache.shape=}")
-    # print(f"hosseins: write_to_kv_cache() {slot_mapping.shape=}")
-    # print(f"hosseins: write_to_kv_cache() {get_shard_spec(slot_mapping)=}")
-
-
     kv_cache = kv_cache.flatten(0, 1)
-
-    # print(f"hosseins: write_to_kv_cache() 4 {get_shard_spec(kv_cache)=} {kv_cache.shape=}")
-
     kv_cache.index_copy_(0, slot_mapping, kv)
-
-    # print(f"hosseins: write_to_kv_cache() 5 {get_shard_spec(kv_cache)=} {kv_cache.shape=}")
-

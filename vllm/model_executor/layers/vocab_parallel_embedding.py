@@ -42,18 +42,10 @@ class UnquantizedEmbeddingMethod(QuantizeMethodBase):
               layer: torch.nn.Module,
               x: torch.Tensor,
               bias: Optional[torch.Tensor] = None) -> torch.Tensor:
-        # print(f"hosseins: UnquantizedEmbeddingMethod -> apply()")
-        # print(f"hosseins: UnquantizedEmbeddingMethod -> apply() [{layer.weight.shape=}]")
-        # print(f"hosseins: UnquantizedEmbeddingMethod -> apply() [{layer.weight.device=}]")
-        # with xp.Trace("UnquantizedEmbeddingMethod.apply()"):
         return F.linear(x, layer.weight, bias)
 
     def embedding(self, layer: torch.nn.Module,
                   input_: torch.Tensor) -> torch.Tensor:
-        # print(f"hosseins: UnquantizedEmbeddingMethod -> embedding()")
-        # print(f"hosseins: UnquantizedEmbeddingMethod -> embedding() [{layer.weight.shape=}]")
-        # print(f"hosseins: UnquantizedEmbeddingMethod -> embedding() [{layer.weight.device=}]")
-        # with xp.Trace("UnquantizedEmbeddingMethod.embedding()"):
         return F.embedding(input_, layer.weight)
 
 
@@ -290,8 +282,6 @@ class VocabParallelEmbedding(torch.nn.Module):
         """Get start and end indices for vocab parallel embedding, following the
         layout outlined in the class docstring, based on the given tp_rank and
         tp_size."""
-        # print(f"hosseins: VocabParallelEmbedding._get_indices()")
-        # with xp.Trace("VocabParallelEmbedding._get_indices()"):
         num_added_embeddings_padded = vocab_size_padded - org_vocab_size_padded
         padded_org_vocab_start_index, padded_org_vocab_end_index = (
             vocab_range_from_global_vocab_size(org_vocab_size_padded, tp_rank,
@@ -403,8 +393,6 @@ class VocabParallelEmbedding(torch.nn.Module):
         else:
             assert loaded_weight.shape[output_dim] == self.org_vocab_size
 
-        # print(f"hosseins: VocabParallelEmbedding -> weight_loader() [{start_idx=}]")
-        # print(f"hosseins: VocabParallelEmbedding -> weight_loader() [{shard_size=}]")
         # Copy the data. Select chunk corresponding to current shard.
         loaded_weight = loaded_weight.narrow(output_dim, start_idx, shard_size)
 
@@ -425,8 +413,6 @@ class VocabParallelEmbedding(torch.nn.Module):
         shard_spmd(data=param.data, mesh=self.mesh, partition_spec=get_col_parallel_partition_spec())
 
     def forward(self, input_):
-        # print(f"hosseins: VocabParallelEmbedding.forward() [{input_.shape}]")
-        # with xp.Trace("VocabParallelEmbedding.forward()"):
         if self.tp_size > 1:
             # Build the mask.
             masked_input, input_mask = get_masked_input_and_mask(
@@ -437,17 +423,14 @@ class VocabParallelEmbedding(torch.nn.Module):
                 self.shard_indices.added_vocab_end_index)
         else:
             masked_input = input_
-        # print(f"hosseins: VocabParallelEmbedding.forward() [{get_shard_spec(masked_input)=}]")
         # Get the embeddings.
         output_parallel = self.quant_method.embedding(self,
                                                     masked_input.long())
-        # print(f"hosseins: VocabParallelEmbedding.forward() [{get_shard_spec(output_parallel)=}]")
         # Mask the output embedding.
         if self.tp_size > 1:
             output_parallel.masked_fill_(input_mask.unsqueeze(-1), 0)
         # Reduce across all the model parallel GPUs.
         output = tensor_model_parallel_all_reduce(output_parallel)
-        # print(f"hosseins: VocabParallelEmbedding.forward() [{get_shard_spec(output)=}]")
         return output
 
     def extra_repr(self) -> str:

@@ -195,12 +195,8 @@ class UnquantizedLinearMethod(LinearMethodBase):
               layer: torch.nn.Module,
               x: torch.Tensor,
               bias: Optional[torch.Tensor] = None) -> torch.Tensor:
-        # print(f"hosseins: UnquantizedLinearMethod -> apply() {layer.weight.shape=} {get_shard_spec(layer.weight)=}")
-        # print(f"hosseins: UnquantizedLinearMethod -> apply() {x.shape=} {get_shard_spec(x)=}")
-        # with xp.Trace("UnquantizedLinearMethod.apply.linear()"):
         out = F.linear(x, layer.weight, bias)
         # mark sharding (as it's lazy - this is the hint not the actual execution of the graph) or xm.mark_step() for debug
-        # print(f"hosseins: UnquantizedLinearMethod -> apply() {out.shape=} {get_shard_spec(out)=}")
 
         return out
 
@@ -330,8 +326,6 @@ class ReplicatedLinear(LinearBase):
     def forward(
         self, x: torch.Tensor
     ) -> Union[torch.Tensor, tuple[torch.Tensor, Optional[Parameter]]]:
-        # print(f"hosseins: ReplicatedLinear -> forward() {type(self)=}")
-        
         bias = self.bias if not self.skip_bias_add else None
         assert self.quant_method is not None
         output = self.quant_method.apply(self, x, bias)
@@ -485,14 +479,10 @@ class ColumnParallelLinear(LinearBase):
     def forward(
         self, input_
     ) -> Union[torch.Tensor, tuple[torch.Tensor, Optional[Parameter]]]:
-        # print(f"hosseins: ColumnParallelLinear -> forward() {type(self)=}")
-        # print(f"hosseins: ColumnParallelLinear -> forward() {type(self.quant_method)=}")
-        # with xp.Trace("ColumnParallelLinear.forward()"):
         bias = self.bias if not self.skip_bias_add else None
 
         # Matrix multiply.
         assert self.quant_method is not None
-        # with xp.Trace("ColumnParallelLinear.forward.quant_method.apply()"):
         output_parallel = self.quant_method.apply(self, input_, bias)
         if self.gather_output:
             # All-gather across the partitions.
@@ -500,7 +490,6 @@ class ColumnParallelLinear(LinearBase):
         else:
             output = output_parallel
 
-        # print(f"hosseins: ColumnParallelLinear -> forward() {get_shard_spec(output)=}")
         output_bias = self.bias if self.skip_bias_add else None
         if not self.return_bias:
             return output
@@ -605,7 +594,6 @@ class MergedColumnParallelLinear(ColumnParallelLinear):
         param_data = param.data
         shard_spmd(param_data.data, self.mesh, get_col_parallel_partition_spec())
         torch._sync(param_data)
-        # print(f"hosseins: MergedColumnParallelLinear -> weight_loader() 1 {get_shard_spec(param_data.data)=}")
 
         output_dim = getattr(param, "output_dim", None)
         # Special case for AQLM codebooks.
@@ -625,7 +613,6 @@ class MergedColumnParallelLinear(ColumnParallelLinear):
                 param_data.copy_(loaded_weight)
                 shard_spmd(param_data.data, self.mesh, get_col_parallel_partition_spec())
                 torch._sync(param_data)
-                # print(f"hosseins: MergedColumnParallelLinear -> weight_loader() 4 {get_shard_spec(param_data.data)=}")
                 return
             
             current_shard_offset = 0
@@ -663,7 +650,6 @@ class MergedColumnParallelLinear(ColumnParallelLinear):
 
                 shard_spmd(param.data, self.mesh, get_col_parallel_partition_spec())
                 torch._sync(param)
-                # print(f"hosseins: MergedColumnParallelLinear -> weight_loader() 5 {get_shard_spec(param.data)=}")
 
             return
 
@@ -701,7 +687,6 @@ class MergedColumnParallelLinear(ColumnParallelLinear):
             param_data = param_data.to(param.device)
             shard_spmd(param_data.data, self.mesh, get_col_parallel_partition_spec())
             torch._sync(param_data)
-            # print(f"hosseins: MergedColumnParallelLinear -> weight_loader() 2 {get_shard_spec(param_data.data)=}")
 
             start_idx = tp_rank * shard_size
             if not is_sharded_weight:
@@ -740,10 +725,6 @@ class MergedColumnParallelLinear(ColumnParallelLinear):
 
         shard_spmd(param.data, self.mesh, get_col_parallel_partition_spec())
         torch._sync(param)
-        # print(f"hosseins: MergedColumnParallelLinear -> weight_loader() 3 {get_shard_spec(param.data)=}")
-        # shard_spmd(param_data.data, self.mesh, get_col_parallel_partition_spec())
-        # torch._sync(param_data)
-        # print(f"hosseins: MergedColumnParallelLinear -> weight_loader() 3 {get_shard_spec(param_data.data)=}")
 
 
 
@@ -1173,8 +1154,6 @@ class QKVParallelLinear(ColumnParallelLinear):
         logger.info(f"hosseins: QKVParallelLinear -> weight_loader() 2 [{param.data.shape=}]")
 
         shard_spmd(param.data, self.mesh, get_col_parallel_partition_spec())
-        # print(f"hosseins: QKVParallelLinear -> weight_loader() {get_shard_spec(param.data)=}")
-        # print(f"hosseins: QKVParallelLinear -> weight_loader() {get_shard_spec(param_data.data)=}")
 
         torch._sync(param)
 
@@ -1308,8 +1287,6 @@ class RowParallelLinear(LinearBase):
         logger.info(f"hosseins: RowParallelLinear -> weight_loader() 2 [{param.data.shape=}]")
 
         shard_spmd(param.data, self.mesh, get_row_parallel_partition_spec())
-        # print(f"hosseins: RowParallelLinear -> weight_loader() {get_shard_spec(param.data)=}")
-        # print(f"hosseins: RowParallelLinear -> weight_loader() {get_shard_spec(param_data.data)=}")
 
         torch._sync(param)
 
@@ -1328,8 +1305,6 @@ class RowParallelLinear(LinearBase):
     def forward(
         self, input_
     ) -> Union[torch.Tensor, tuple[torch.Tensor, Optional[Parameter]]]:
-        # print(f"hosseins: RowParallelLinear -> forward() {type(self)=}")
-        # with xp.Trace("RowParallelLinear.forward.part_1()"):
         if self.input_is_parallel:
             input_parallel = input_
         else:
@@ -1338,7 +1313,6 @@ class RowParallelLinear(LinearBase):
                 input_, num_partitions=self.tp_size)
             input_parallel = splitted_input[tp_rank].contiguous()
 
-        # with xp.Trace("RowParallelLinear.apply()"):
         # Matrix multiply.
         assert self.quant_method is not None
         # Only fuse bias add into GEMM for rank 0 (this ensures that
@@ -1535,8 +1509,6 @@ class QKVCrossParallelLinear(LinearBase):
         decoder_hidden_states: torch.Tensor,
         encoder_hidden_states: torch.Tensor,
     ) -> tuple[torch.Tensor, ...]:
-        # print(f"hosseins: QKVCrossParallelLinear -> forward() {type(self)=}")
-        # with xp.Trace("QKVCrossParallelLinear.forward()"):
         q, _ = self.q_proj_decoder(decoder_hidden_states)
         if encoder_hidden_states is None:
             # Encoder KV already cached.

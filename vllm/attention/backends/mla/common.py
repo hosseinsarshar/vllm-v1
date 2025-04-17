@@ -1344,7 +1344,6 @@ class MLACommonImpl(MLAAttentionImpl[T], Generic[T]):
         attn_metadata: T,
         output: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-        # print("hosseins: MLACommonBackend. forward()")
         if output is not None:
             raise NotImplementedError(
                 "output is not yet supported for MLAImplBase")

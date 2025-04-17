@@ -56,15 +56,12 @@ try:
         def get_node_and_gpu_ids(self) -> Tuple[str, List[int]]:
             node_id = ray.get_runtime_context().get_node_id()
             device_key = vllm.platforms.current_platform.ray_device_key
-            # print(f"hosseins: get_node_and_gpu_ids() {device_key=}")
-            # print(f"hosseins: get_node_and_gpu_ids() {node_id=}")
             
             if not device_key:
                 raise RuntimeError("current platform %s does not support ray.",
                                    vllm.platforms.current_platform.device_name)
             gpu_ids = ray.get_runtime_context().get_accelerator_ids(
             )[device_key]
-            # print(f"hosseins: get_node_and_gpu_ids() {gpu_ids=}")
 
             return node_id, gpu_ids
 

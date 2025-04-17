@@ -359,11 +359,6 @@ class TPUModelRunner:
         block_size = self.vllm_config.cache_config.block_size
         kv_cache_spec: dict[str, KVCacheSpec] = {}
         for layer_name, attn_module in forward_ctx.items():
-            # # print(f"hosseins: {layer_name=}")
-            # # print(f"hosseins: {block_size=}")
-            # # print(f"hosseins: {attn_module.num_kv_heads=}")
-            # # print(f"hosseins: {attn_module.head_size=}")
-            # # print(f"hosseins: {attn_module.dtype=}")
             assert isinstance(attn_module, Attention)
             if attn_module.attn_type == AttentionType.DECODER:
                 if attn_module.sliding_window is not None:
@@ -620,8 +615,6 @@ class TPUModelRunner:
         intermediate_tensors: Optional[IntermediateTensors] = None,
     ) -> ModelRunnerOutput:
         # Update cached state
-        # print("hosseins: TPUModelRunner.execute_model() starts")
-        # with xp.Trace("TPUModelRunner.execute_model.part1()"):
         self._update_states(scheduler_output)
         if not scheduler_output.total_num_scheduled_tokens:
             # Return empty ModelRunnerOuptut if there's no work to do.
@@ -751,7 +744,6 @@ class TPUModelRunner:
         # Check there are no new graphs compiled - all the graphs should be
         # captured and compiled during warm up.
         self._verify_num_xla_graphs("execute_model")
-        # print("hosseins: TPUModelRunner.execute_model() ends")
 
         return model_runner_output
 
@@ -777,9 +769,6 @@ class TPUModelRunner:
         xm.mark_step()
         xm.wait_device_ops()
         model = ModelWrapperV1(model)
-        # print("hosseins: load_model() model is loaded")
-        # self.model = model
-
         # hosseins: torch.compile
         self.model = torch.compile(model,
                                    backend="openxla",
@@ -788,8 +777,6 @@ class TPUModelRunner:
 
     @torch.no_grad()
     def _dummy_run(self, kv_caches, num_tokens: int) -> None:
-        # print("hosseins: TPUModelRunner._dummy_run()")
-        # with xp.Trace("TPUModelRunner._dummy_run()"):
         if self.is_multimodal_model:
             input_ids = None
             inputs_embeds = torch.zeros((num_tokens, self.hidden_size),
@@ -910,14 +897,6 @@ class TPUModelRunner:
                 "supported yet.")
 
         kv_caches: dict[str, torch.Tensor] = {}
-        # print(f"hosseins: initialize_kv_cache() {kv_cache_config=}")
-
-        # # print(f"hosseins: {len(kv_cache_config.kv_cache_spec)=}")
-        # print(f"hosseins: {kv_cache_config.num_blocks=}")
-        # print(f"hosseins: {len(kv_cache_config.tensors)=}")
-        # # print(f"hosseins: {len(kv_cache_config.groups)=}")
-
-        # # print(f"hosseins: {len(kv_cache_config.kv_cache_spec.items())=}")
 
         for kv_cache_group in kv_cache_config.kv_cache_groups:
             kv_cache_spec = kv_cache_group.kv_cache_spec
@@ -933,7 +912,6 @@ class TPUModelRunner:
 
 
 
-                    # print(f"hosseins: [{kv_cache_shape=}]")
                     tpu_kv_cache = torch.zeros(kv_cache_shape,
                                                dtype=dtype,
                                                device=self.device)
@@ -942,13 +920,6 @@ class TPUModelRunner:
                 else:
                     raise NotImplementedError
                 
-                # print(f"hosseins: ============================= {layer_name} =============================")
-                # print(f"hosseins: {num_blocks=}")
-                # print(f"hosseins: {kv_cache_spec=}")
-                # # print(f"hosseins: {layer_spec.num_kv_heads=}")
-                # # print(f"hosseins: {layer_spec.head_size=}")
-
-        # print(f"hosseins: initialize_kv_cache() {kv_cache_config=}")
         bind_kv_cache(
             kv_caches,
             self.vllm_config.compilation_config.static_forward_context,
@@ -985,11 +956,6 @@ class ModelWrapperV1(nn.Module):
             inputs_embeds: The input embeddings of shape [num_tokens,
                 hidden_size]. It is used for multimodal models.
         """
-        # print("hosseins: ModelWrapperV1.forward()")
-        # print(f"hosseins: ModelWrapperV1 -> forward() 1 {get_shard_spec(input_ids)=}")
-        # print(f"hosseins: ModelWrapperV1 -> forward() 1 {get_shard_spec(positions)=}")
-        # # print(f"hosseins: ModelWrapperV1 -> forward() 1 {get_shard_spec(inputs_embeds)=}")
-        # with xp.Trace("ModelWrapperV1.forward()"):
         assert self.model is not None
         
         hidden_states = self.model(
@@ -997,11 +963,6 @@ class ModelWrapperV1(nn.Module):
             positions=positions,
             inputs_embeds=inputs_embeds,
         )
-
-        # print(f"hosseins: ModelWrapperV1 -> forward() 2 {get_shard_spec(hidden_states)=}")
-        # print(f"hosseins: ModelWrapperV1 -> forward() 2 {get_shard_spec(input_ids)=}")
-        # print(f"hosseins: ModelWrapperV1 -> forward() 2 {get_shard_spec(positions)=}")
-        # # print(f"hosseins: ModelWrapperV1 -> forward() 2 {get_shard_spec(inputs_embeds)=}")
 
         return hidden_states
 
@@ -1029,14 +990,7 @@ class ModelWrapperV1(nn.Module):
 
     def compute_logits(self,
                        hidden_states: torch.Tensor) -> Optional[torch.Tensor]:
-        # print(f"hosseins: ModelWrapperV1 -> compute_logits() {hidden_states.shape=}")
-        # print(f"hosseins: ModelWrapperV1 -> compute_logits() {get_shard_spec(hidden_states)=}")
-
-        # SamplingMetadata here for pruning output in LogitsProcessor, disabled
-        # with xp.Trace("ModelWrapperV1.compute_logits()"):
         logits = self.model.compute_logits(hidden_states, None)
-        # print(f"hosseins: ModelWrapperV1 -> compute_logits() {logits.shape=}")
-        # print(f"hosseins: ModelWrapperV1 -> compute_logits() {get_shard_spec(logits)=}")
         return logits
 
     def get_multimodal_embeddings(self, *args, **kwargs):
