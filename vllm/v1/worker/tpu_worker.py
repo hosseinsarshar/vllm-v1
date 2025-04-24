@@ -234,7 +234,6 @@ class TPUWorker:
         # print(f"hosseins: initialize_from_config() {kv_cache_config=}")
         self.model_runner.initialize_kv_cache(kv_cache_config)
 
-
     def check_health(self) -> None:
         # worker will always be healthy as long as it's running.
         return
