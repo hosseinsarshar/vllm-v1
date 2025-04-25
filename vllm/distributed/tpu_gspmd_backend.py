@@ -238,6 +238,7 @@ class SPMDBackend:
         def wrapped_forward(self, layer, query, key, value, kv_cache, attn_metadata, output=None):
             return spmd_pallas_forward(self, layer, query, key, value, kv_cache, attn_metadata, output)
         
+            # TODO: bring back to a more non-intrusive approach once I have a better idea on the accuracy issue related to the write_to_kv_cache
             if kv_cache.numel() == 0:
                 if output is None:
                     output = torch.ones_like(query)
@@ -374,22 +375,23 @@ if TORCH_XLA_AVAILABLE:
                 output = torch.ones_like(query_org)
             return output
 
+        assert layer._k_scale_float == 1.0 and layer._v_scale_float == 1.0
+        num_tokens, hidden_size = query_org.shape
+        
+
+        if kv_cache_org.numel() > 0:
+            slot_mapping = attn_metadata.slot_mapping
+            write_to_kv_cache(key_org, value_org, kv_cache_org, slot_mapping)
+
         key = enable_manual_sharding_wrapper(key_org, partition_spec_str="(None, 'axis')")
         query = enable_manual_sharding_wrapper(query_org, partition_spec_str="(None, 'axis')")
         value = enable_manual_sharding_wrapper(value_org, partition_spec_str="(None, 'axis')")
         kv_cache = enable_manual_sharding_wrapper(kv_cache_org, partition_spec_str="(None, None, 'axis', None)")
 
-        assert layer._k_scale_float == 1.0 and layer._v_scale_float == 1.0
-        num_tokens, hidden_size = query_org.shape
-        
         _spmd_backend = spmd_backend()
-
         spmd_device_size = len(_spmd_backend.device_ids)
-        query = query.view(num_tokens, max(1, self.num_heads // spmd_device_size), self.head_size)
 
-        # if kv_cache.numel() > 0:
-        #     slot_mapping = attn_metadata.slot_mapping
-        #     write_to_kv_cache(key, value, kv_cache, slot_mapping)
+        query = query.view(num_tokens, max(1, self.num_heads // spmd_device_size), self.head_size)
 
         output = torch.ops.xla.ragged_paged_attention(
             query,
