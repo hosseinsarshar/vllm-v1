@@ -156,6 +156,10 @@ class PallasAttentionBackendImpl(AttentionImpl):
                 output = torch.ones_like(query_org)
             return output
 
+        if kv_cache_org.numel() > 0:
+            slot_mapping = attn_metadata.slot_mapping
+            write_to_kv_cache(key_org, value_org, kv_cache_org, slot_mapping)
+
         key = enable_manual_sharding_wrapper(key_org, partition_spec_str="(None, 'axis')")
         query = enable_manual_sharding_wrapper(query_org, partition_spec_str="(None, 'axis')")
         value = enable_manual_sharding_wrapper(value_org, partition_spec_str="(None, 'axis')")
@@ -165,10 +169,6 @@ class PallasAttentionBackendImpl(AttentionImpl):
         num_tokens, hidden_size = query_org.shape
         device_ids = get_device_ids()
         query = query.view(num_tokens, max(1, self.num_heads // len(device_ids)) if (is_spmd() and True) else self.num_heads, self.head_size)
-
-        if kv_cache.numel() > 0:
-            slot_mapping = attn_metadata.slot_mapping
-            write_to_kv_cache(key, value, kv_cache, slot_mapping)
 
         output = torch.ops.xla.ragged_paged_attention(
             query,
